@@ -25,7 +25,8 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
-    await db.Database.EnsureCreatedAsync();
+    await MigrationBootstrapper.MarkLegacyDatabaseAsMigratedAsync(db);
+    await db.Database.MigrateAsync();
     await SeedData.EnsureSeededAsync(db);
 }
 
@@ -267,10 +268,6 @@ static CopySummary ToCopySummary(LibraryCopy copy) =>
         copy.Currency,
         copy.IsGift,
         copy.IsSigned,
-        copy.IsLoaned,
-        copy.LoanedTo,
-        copy.LoanedAt,
-        copy.ExpectedReturnAt,
         copy.Notes);
 
 static CatalogStats ToStats(List<Work> works)
@@ -278,9 +275,8 @@ static CatalogStats ToStats(List<Work> works)
     var readCount = works.Count(work => work.Readings.Any(reading => reading.Status == ReadingStatus.Read));
     var ownedCount = works.Count(work => work.Copies.Count > 0);
     var readingNowCount = works.Count(work => work.Readings.Any(reading => reading.Status == ReadingStatus.Reading));
-    var loanedCount = works.SelectMany(work => work.Copies).Count(copy => copy.IsLoaned);
 
-    return new CatalogStats(works.Count, readCount, ownedCount, readingNowCount, loanedCount);
+    return new CatalogStats(works.Count, readCount, ownedCount, readingNowCount);
 }
 
 static Reading CreateReading(Guid workId, UpsertReadingRequest request)
@@ -340,10 +336,6 @@ static LibraryCopy CreateCopy(Guid workId, CreateCopyRequest request)
         Currency = request.Currency?.Trim() ?? "BRL",
         IsGift = request.IsGift,
         IsSigned = request.IsSigned,
-        IsLoaned = request.IsLoaned,
-        LoanedTo = request.LoanedTo?.Trim(),
-        LoanedAt = request.LoanedAt,
-        ExpectedReturnAt = request.ExpectedReturnAt,
         Notes = request.Notes?.Trim(),
         CreatedAt = now,
         UpdatedAt = now
@@ -398,7 +390,6 @@ class BooksDbContext(DbContextOptions<BooksDbContext> options) : DbContext(optio
             entity.Property(copy => copy.Condition).HasMaxLength(80);
             entity.Property(copy => copy.Location).HasMaxLength(180);
             entity.Property(copy => copy.Currency).HasMaxLength(8);
-            entity.Property(copy => copy.LoanedTo).HasMaxLength(180);
             entity.Property(copy => copy.PricePaid).HasPrecision(10, 2);
         });
     }
@@ -548,6 +539,83 @@ static class SeedData
     }
 }
 
+static class MigrationBootstrapper
+{
+    public static async Task MarkLegacyDatabaseAsMigratedAsync(BooksDbContext db)
+    {
+        if (!await TableExistsAsync(db, "Works"))
+        {
+            return;
+        }
+
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
+                "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
+                "ProductVersion" TEXT NOT NULL
+            );
+            """);
+
+        if (await MigrationHistoryHasRowsAsync(db))
+        {
+            return;
+        }
+
+        var initialMigration = db.Database.GetMigrations().FirstOrDefault();
+        if (initialMigration is null)
+        {
+            return;
+        }
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+            VALUES ({0}, {1});
+            """,
+            initialMigration,
+            "8.0.21");
+    }
+
+    private static async Task<bool> TableExistsAsync(BooksDbContext db, string tableName)
+    {
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM sqlite_master
+            WHERE type = 'table' AND name = $tableName;
+            """;
+
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "$tableName";
+        parameter.Value = tableName;
+        command.Parameters.Add(parameter);
+
+        if (command.Connection?.State != System.Data.ConnectionState.Open)
+        {
+            await db.Database.OpenConnectionAsync();
+        }
+
+        var result = await command.ExecuteScalarAsync();
+        return Convert.ToInt32(result) > 0;
+    }
+
+    private static async Task<bool> MigrationHistoryHasRowsAsync(BooksDbContext db)
+    {
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM "__EFMigrationsHistory";
+            """;
+
+        if (command.Connection?.State != System.Data.ConnectionState.Open)
+        {
+            await db.Database.OpenConnectionAsync();
+        }
+
+        var result = await command.ExecuteScalarAsync();
+        return Convert.ToInt32(result) > 0;
+    }
+}
+
 class Work
 {
     public Guid Id { get; set; }
@@ -601,10 +669,6 @@ class LibraryCopy
     public string Currency { get; set; } = "BRL";
     public bool IsGift { get; set; }
     public bool IsSigned { get; set; }
-    public bool IsLoaned { get; set; }
-    public string? LoanedTo { get; set; }
-    public DateOnly? LoanedAt { get; set; }
-    public DateOnly? ExpectedReturnAt { get; set; }
     public string? Notes { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
@@ -655,10 +719,6 @@ record CopySummary(
     string Currency,
     bool IsGift,
     bool IsSigned,
-    bool IsLoaned,
-    string? LoanedTo,
-    DateOnly? LoanedAt,
-    DateOnly? ExpectedReturnAt,
     string? Notes);
 
 record CatalogResponse(
@@ -670,8 +730,7 @@ record CatalogStats(
     int TotalWorks,
     int ReadWorks,
     int OwnedWorks,
-    int ReadingNow,
-    int LoanedCopies);
+    int ReadingNow);
 
 record CreateWorkRequest(
     string Title,
@@ -710,10 +769,6 @@ record CreateCopyRequest(
     string? Currency,
     bool IsGift,
     bool IsSigned,
-    bool IsLoaned,
-    string? LoanedTo,
-    DateOnly? LoanedAt,
-    DateOnly? ExpectedReturnAt,
     string? Notes);
 
 enum ReadingStatus

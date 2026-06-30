@@ -117,10 +117,9 @@ function App() {
             edition: form.edition || null,
             isbn: form.isbn || null,
             location: form.location || null,
-            condition: form.condition || null,
-            isGift: false,
-            isLoaned: false,
-          }
+          condition: form.condition || null,
+          isGift: false,
+        }
         : null,
     };
 
@@ -200,7 +199,6 @@ function App() {
           format: 'Physical',
           location,
           isGift: false,
-          isLoaned: false,
         }),
       });
 
@@ -240,7 +238,6 @@ function App() {
         <StatCard label="Lidas" value={catalog?.stats?.readWorks || 0} />
         <StatCard label="Na biblioteca" value={catalog?.stats?.ownedWorks || 0} />
         <StatCard label="Lendo agora" value={catalog?.stats?.readingNow || 0} />
-        <StatCard label="Emprestados" value={catalog?.stats?.loanedCopies || 0} />
       </section>
 
       <section className="workspace">
@@ -517,7 +514,6 @@ function WorkDetail({ addCopy, onRatingChange, onStatusChange, work }) {
                 <span>{copy.publisher || 'Editora nao informada'}</span>
                 <span>{copy.edition || 'Edicao nao informada'}</span>
                 <span>{copy.location || 'Sem localizacao'}</span>
-                {copy.isLoaned && <span>Emprestado para {copy.loanedTo || 'alguem'}</span>}
               </article>
             ))}
           </div>
