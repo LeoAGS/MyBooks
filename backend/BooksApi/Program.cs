@@ -26,6 +26,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
     await MigrationBootstrapper.MarkLegacyDatabaseAsMigratedAsync(db);
+    await MigrationBootstrapper.RemoveLegacyLoanColumnsAsync(db);
     await db.Database.MigrateAsync();
     await SeedData.EnsureSeededAsync(db);
 }
@@ -124,11 +125,13 @@ app.MapPost("/api/works/{id:guid}/readings", async (Guid id, UpsertReadingReques
         return Results.NotFound();
     }
 
-    work.Readings.Add(CreateReading(work.Id, request));
+    var reading = CreateReading(work.Id, request);
+    db.Readings.Add(reading);
     work.UpdatedAt = DateTimeOffset.UtcNow;
     await db.SaveChangesAsync();
 
-    return Results.Created($"/api/works/{id}/readings/{work.Readings.Last().Id}", ToWorkSummary(work));
+    work = await LoadWorks(db).FirstAsync(item => item.Id == id);
+    return Results.Created($"/api/works/{id}/readings/{reading.Id}", ToWorkSummary(work));
 })
 .WithName("CreateReading")
 .WithOpenApi();
@@ -172,13 +175,67 @@ app.MapPost("/api/works/{id:guid}/copies", async (Guid id, CreateCopyRequest req
     }
 
     var copy = CreateCopy(work.Id, request);
-    work.Copies.Add(copy);
+    db.Copies.Add(copy);
     work.UpdatedAt = DateTimeOffset.UtcNow;
     await db.SaveChangesAsync();
 
+    work = await LoadWorks(db).FirstAsync(item => item.Id == id);
     return Results.Created($"/api/works/{id}/copies/{copy.Id}", ToWorkSummary(work));
 })
 .WithName("CreateCopy")
+.WithOpenApi();
+
+app.MapPut("/api/works/{workId:guid}/copies/{copyId:guid}", async (
+    Guid workId,
+    Guid copyId,
+    CreateCopyRequest request,
+    BooksDbContext db) =>
+{
+    var work = await LoadWorks(db).FirstOrDefaultAsync(item => item.Id == workId);
+    if (work is null)
+    {
+        return Results.NotFound();
+    }
+
+    var copy = work.Copies.FirstOrDefault(item => item.Id == copyId);
+    if (copy is null)
+    {
+        return Results.NotFound();
+    }
+
+    UpdateCopy(copy, request);
+    work.UpdatedAt = DateTimeOffset.UtcNow;
+    await db.SaveChangesAsync();
+
+    return Results.Ok(ToWorkSummary(work));
+})
+.WithName("UpdateCopy")
+.WithOpenApi();
+
+app.MapDelete("/api/works/{workId:guid}/copies/{copyId:guid}", async (
+    Guid workId,
+    Guid copyId,
+    BooksDbContext db) =>
+{
+    var work = await LoadWorks(db).FirstOrDefaultAsync(item => item.Id == workId);
+    if (work is null)
+    {
+        return Results.NotFound();
+    }
+
+    var copy = work.Copies.FirstOrDefault(item => item.Id == copyId);
+    if (copy is null)
+    {
+        return Results.NotFound();
+    }
+
+    db.Copies.Remove(copy);
+    work.UpdatedAt = DateTimeOffset.UtcNow;
+    await db.SaveChangesAsync();
+
+    return Results.NoContent();
+})
+.WithName("DeleteCopy")
 .WithOpenApi();
 
 app.MapDelete("/api/works/{id:guid}", async (Guid id, BooksDbContext db) =>
@@ -340,6 +397,27 @@ static LibraryCopy CreateCopy(Guid workId, CreateCopyRequest request)
         CreatedAt = now,
         UpdatedAt = now
     };
+}
+
+static void UpdateCopy(LibraryCopy copy, CreateCopyRequest request)
+{
+    copy.Format = request.Format;
+    copy.Publisher = request.Publisher?.Trim();
+    copy.Edition = request.Edition?.Trim();
+    copy.Isbn = request.Isbn?.Trim();
+    copy.PublishedYear = request.PublishedYear;
+    copy.Language = request.Language?.Trim();
+    copy.PageCount = request.PageCount;
+    copy.Condition = request.Condition?.Trim();
+    copy.Location = request.Location?.Trim();
+    copy.AcquisitionDate = request.AcquisitionDate;
+    copy.AcquisitionType = request.AcquisitionType;
+    copy.PricePaid = request.PricePaid;
+    copy.Currency = request.Currency?.Trim() ?? "BRL";
+    copy.IsGift = request.IsGift;
+    copy.IsSigned = request.IsSigned;
+    copy.Notes = request.Notes?.Trim();
+    copy.UpdatedAt = DateTimeOffset.UtcNow;
 }
 
 class BooksDbContext(DbContextOptions<BooksDbContext> options) : DbContext(options)
@@ -541,6 +619,93 @@ static class SeedData
 
 static class MigrationBootstrapper
 {
+    public static async Task RemoveLegacyLoanColumnsAsync(BooksDbContext db)
+    {
+        if (!await ColumnExistsAsync(db, "Copies", "IsLoaned"))
+        {
+            return;
+        }
+
+        await db.Database.ExecuteSqlRawAsync("""
+            PRAGMA foreign_keys = OFF;
+
+            CREATE TABLE "Copies_new" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_Copies" PRIMARY KEY,
+                "WorkId" TEXT NOT NULL,
+                "Format" TEXT NOT NULL,
+                "Publisher" TEXT NULL,
+                "Edition" TEXT NULL,
+                "Isbn" TEXT NULL,
+                "PublishedYear" INTEGER NULL,
+                "Language" TEXT NULL,
+                "PageCount" INTEGER NULL,
+                "Condition" TEXT NULL,
+                "Location" TEXT NULL,
+                "AcquisitionDate" TEXT NULL,
+                "AcquisitionType" TEXT NOT NULL,
+                "PricePaid" TEXT NULL,
+                "Currency" TEXT NOT NULL,
+                "IsGift" INTEGER NOT NULL,
+                "IsSigned" INTEGER NOT NULL,
+                "Notes" TEXT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "UpdatedAt" TEXT NOT NULL,
+                CONSTRAINT "FK_Copies_Works_WorkId" FOREIGN KEY ("WorkId") REFERENCES "Works" ("Id") ON DELETE CASCADE
+            );
+
+            INSERT INTO "Copies_new" (
+                "Id",
+                "WorkId",
+                "Format",
+                "Publisher",
+                "Edition",
+                "Isbn",
+                "PublishedYear",
+                "Language",
+                "PageCount",
+                "Condition",
+                "Location",
+                "AcquisitionDate",
+                "AcquisitionType",
+                "PricePaid",
+                "Currency",
+                "IsGift",
+                "IsSigned",
+                "Notes",
+                "CreatedAt",
+                "UpdatedAt"
+            )
+            SELECT
+                "Id",
+                "WorkId",
+                "Format",
+                "Publisher",
+                "Edition",
+                "Isbn",
+                "PublishedYear",
+                "Language",
+                "PageCount",
+                "Condition",
+                "Location",
+                "AcquisitionDate",
+                "AcquisitionType",
+                "PricePaid",
+                "Currency",
+                "IsGift",
+                "IsSigned",
+                "Notes",
+                "CreatedAt",
+                "UpdatedAt"
+            FROM "Copies";
+
+            DROP TABLE "Copies";
+            ALTER TABLE "Copies_new" RENAME TO "Copies";
+            CREATE INDEX "IX_Copies_WorkId" ON "Copies" ("WorkId");
+
+            PRAGMA foreign_keys = ON;
+            """);
+    }
+
     public static async Task MarkLegacyDatabaseAsMigratedAsync(BooksDbContext db)
     {
         if (!await TableExistsAsync(db, "Works"))
@@ -587,6 +752,29 @@ static class MigrationBootstrapper
         var parameter = command.CreateParameter();
         parameter.ParameterName = "$tableName";
         parameter.Value = tableName;
+        command.Parameters.Add(parameter);
+
+        if (command.Connection?.State != System.Data.ConnectionState.Open)
+        {
+            await db.Database.OpenConnectionAsync();
+        }
+
+        var result = await command.ExecuteScalarAsync();
+        return Convert.ToInt32(result) > 0;
+    }
+
+    private static async Task<bool> ColumnExistsAsync(BooksDbContext db, string tableName, string columnName)
+    {
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = $"""
+            SELECT COUNT(*)
+            FROM pragma_table_info('{tableName}')
+            WHERE name = $columnName;
+            """;
+
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "$columnName";
+        parameter.Value = columnName;
         command.Parameters.Add(parameter);
 
         if (command.Connection?.State != System.Data.ConnectionState.Open)

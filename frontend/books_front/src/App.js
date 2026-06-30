@@ -17,7 +17,15 @@ const copyFormatLabels = {
   Audiobook: 'Audiobook',
 };
 
-const emptyForm = {
+const acquisitionTypeLabels = {
+  Bought: 'Comprado',
+  Gift: 'Presente',
+  Inherited: 'Herdado',
+  Download: 'Download',
+  Unknown: 'Nao informado',
+};
+
+const emptyWorkForm = {
   title: '',
   author: '',
   originalYear: '',
@@ -36,13 +44,33 @@ const emptyForm = {
   condition: '',
 };
 
+const emptyCopyForm = {
+  format: 'Physical',
+  publisher: '',
+  edition: '',
+  isbn: '',
+  publishedYear: '',
+  language: '',
+  pageCount: '',
+  condition: '',
+  location: '',
+  acquisitionDate: '',
+  acquisitionType: 'Unknown',
+  pricePaid: '',
+  currency: 'BRL',
+  isGift: false,
+  isSigned: false,
+  notes: '',
+};
+
 function App() {
   const [catalog, setCatalog] = useState(null);
   const [activeTab, setActiveTab] = useState('readings');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [selectedWorkId, setSelectedWorkId] = useState(null);
-  const [form, setForm] = useState(emptyForm);
+  const [workForm, setWorkForm] = useState(emptyWorkForm);
+  const [copyModal, setCopyModal] = useState(null);
   const [notice, setNotice] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -98,28 +126,33 @@ function App() {
     setIsSaving(true);
 
     const payload = {
-      title: form.title,
-      author: form.author,
-      originalYear: toNumber(form.originalYear),
-      genre: form.genre || null,
-      description: form.description || null,
-      reading: form.addReading
+      title: workForm.title,
+      author: workForm.author,
+      originalYear: toNumber(workForm.originalYear),
+      genre: workForm.genre || null,
+      description: workForm.description || null,
+      reading: workForm.addReading
         ? {
-            status: form.readingStatus,
-            rating: toNumber(form.rating),
-            notes: form.notes || null,
+            status: workForm.readingStatus,
+            rating: toNumber(workForm.rating),
+            notes: workForm.notes || null,
+            isFavorite: false,
+            wantToReRead: false,
           }
         : null,
-      copy: form.addCopy
+      copy: workForm.addCopy
         ? {
-            format: form.format,
-            publisher: form.publisher || null,
-            edition: form.edition || null,
-            isbn: form.isbn || null,
-            location: form.location || null,
-          condition: form.condition || null,
-          isGift: false,
-        }
+            format: workForm.format,
+            publisher: workForm.publisher || null,
+            edition: workForm.edition || null,
+            isbn: workForm.isbn || null,
+            location: workForm.location || null,
+            condition: workForm.condition || null,
+            acquisitionType: 'Unknown',
+            currency: 'BRL',
+            isGift: false,
+            isSigned: false,
+          }
         : null,
     };
 
@@ -135,7 +168,7 @@ function App() {
       }
 
       const created = await response.json();
-      setForm(emptyForm);
+      setWorkForm(emptyWorkForm);
       setSelectedWorkId(created.id);
       setNotice('Obra adicionada ao catalogo.');
       await loadCatalog();
@@ -155,6 +188,8 @@ function App() {
       notes: reading.notes,
       startedAt: reading.startedAt,
       finishedAt: reading.finishedAt,
+      isFavorite: reading.isFavorite || false,
+      wantToReRead: reading.wantToReRead || false,
     });
   }
 
@@ -163,6 +198,8 @@ function App() {
     await saveReading(work.id, {
       ...reading,
       rating: toNumber(rating),
+      isFavorite: reading.isFavorite || false,
+      wantToReRead: reading.wantToReRead || false,
     });
   }
 
@@ -185,32 +222,84 @@ function App() {
     }
   }
 
-  async function addCopy(work) {
-    const location = window.prompt('Onde esse exemplar fica? Ex: Estante sala / Prateleira 2');
-    if (!location) {
+  function openCreateCopyModal(work) {
+    setCopyModal({
+      mode: 'create',
+      work,
+      copy: null,
+      form: emptyCopyForm,
+    });
+  }
+
+  function openEditCopyModal(work, copy) {
+    setCopyModal({
+      mode: 'edit',
+      work,
+      copy,
+      form: copyToForm(copy),
+    });
+  }
+
+  function closeCopyModal() {
+    setCopyModal(null);
+  }
+
+  async function handleCopySubmit(event) {
+    event.preventDefault();
+    if (!copyModal) {
+      return;
+    }
+
+    setIsSaving(true);
+    const payload = copyFormToPayload(copyModal.form);
+    const isEditing = copyModal.mode === 'edit';
+    const url = isEditing
+      ? `${API_BASE_URL}/api/works/${copyModal.work.id}/copies/${copyModal.copy.id}`
+      : `${API_BASE_URL}/api/works/${copyModal.work.id}/copies`;
+
+    try {
+      const response = await fetch(url, {
+        method: isEditing ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao salvar exemplar.');
+      }
+
+      setSelectedWorkId(copyModal.work.id);
+      setActiveTab('library');
+      setNotice(isEditing ? 'Exemplar atualizado.' : 'Exemplar adicionado a biblioteca.');
+      closeCopyModal();
+      await loadCatalog();
+    } catch (error) {
+      setNotice('Nao consegui salvar o exemplar.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function deleteCopy(work, copy) {
+    const confirmed = window.confirm(`Remover este exemplar de "${work.title}"?`);
+    if (!confirmed) {
       return;
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/works/${work.id}/copies`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          format: 'Physical',
-          location,
-          isGift: false,
-        }),
+      const response = await fetch(`${API_BASE_URL}/api/works/${work.id}/copies/${copy.id}`, {
+        method: 'DELETE',
       });
 
       if (!response.ok) {
-        throw new Error('Falha ao adicionar exemplar.');
+        throw new Error('Falha ao remover exemplar.');
       }
 
-      setActiveTab('library');
-      setNotice('Exemplar adicionado a biblioteca.');
+      setSelectedWorkId(work.id);
+      setNotice('Exemplar removido.');
       await loadCatalog();
     } catch (error) {
-      setNotice('Nao consegui adicionar o exemplar.');
+      setNotice('Nao consegui remover o exemplar.');
     }
   }
 
@@ -248,8 +337,8 @@ function App() {
               Titulo
               <input
                 required
-                value={form.title}
-                onChange={(event) => setFormValue(setForm, 'title', event.target.value)}
+                value={workForm.title}
+                onChange={(event) => setFormValue(setWorkForm, 'title', event.target.value)}
                 placeholder="Ex: Grande Sertao: Veredas"
               />
             </label>
@@ -257,8 +346,8 @@ function App() {
               Autor
               <input
                 required
-                value={form.author}
-                onChange={(event) => setFormValue(setForm, 'author', event.target.value)}
+                value={workForm.author}
+                onChange={(event) => setFormValue(setWorkForm, 'author', event.target.value)}
                 placeholder="Ex: Guimaraes Rosa"
               />
             </label>
@@ -267,20 +356,20 @@ function App() {
                 Ano original
                 <input
                   inputMode="numeric"
-                  value={form.originalYear}
-                  onChange={(event) => setFormValue(setForm, 'originalYear', event.target.value)}
+                  value={workForm.originalYear}
+                  onChange={(event) => setFormValue(setWorkForm, 'originalYear', event.target.value)}
                 />
               </label>
               <label>
                 Genero
-                <input value={form.genre} onChange={(event) => setFormValue(setForm, 'genre', event.target.value)} />
+                <input value={workForm.genre} onChange={(event) => setFormValue(setWorkForm, 'genre', event.target.value)} />
               </label>
             </div>
             <label>
               Observacao
               <textarea
-                value={form.description}
-                onChange={(event) => setFormValue(setForm, 'description', event.target.value)}
+                value={workForm.description}
+                onChange={(event) => setFormValue(setWorkForm, 'description', event.target.value)}
                 rows="3"
               />
             </label>
@@ -288,18 +377,18 @@ function App() {
             <label className="check-row">
               <input
                 type="checkbox"
-                checked={form.addReading}
-                onChange={(event) => setFormValue(setForm, 'addReading', event.target.checked)}
+                checked={workForm.addReading}
+                onChange={(event) => setFormValue(setWorkForm, 'addReading', event.target.checked)}
               />
               Registrar em leituras
             </label>
-            {form.addReading && (
+            {workForm.addReading && (
               <div className="nested-fields">
                 <label>
                   Status
                   <select
-                    value={form.readingStatus}
-                    onChange={(event) => setFormValue(setForm, 'readingStatus', event.target.value)}
+                    value={workForm.readingStatus}
+                    onChange={(event) => setFormValue(setWorkForm, 'readingStatus', event.target.value)}
                   >
                     {Object.entries(readingStatusLabels).map(([value, label]) => (
                       <option key={value} value={value}>
@@ -314,16 +403,16 @@ function App() {
                     inputMode="numeric"
                     max="5"
                     min="1"
-                    value={form.rating}
-                    onChange={(event) => setFormValue(setForm, 'rating', event.target.value)}
+                    value={workForm.rating}
+                    onChange={(event) => setFormValue(setWorkForm, 'rating', event.target.value)}
                     placeholder="1 a 5"
                   />
                 </label>
                 <label>
                   Notas pessoais
                   <textarea
-                    value={form.notes}
-                    onChange={(event) => setFormValue(setForm, 'notes', event.target.value)}
+                    value={workForm.notes}
+                    onChange={(event) => setFormValue(setWorkForm, 'notes', event.target.value)}
                     rows="2"
                   />
                 </label>
@@ -333,17 +422,20 @@ function App() {
             <label className="check-row">
               <input
                 type="checkbox"
-                checked={form.addCopy}
-                onChange={(event) => setFormValue(setForm, 'addCopy', event.target.checked)}
+                checked={workForm.addCopy}
+                onChange={(event) => setFormValue(setWorkForm, 'addCopy', event.target.checked)}
               />
               Tambem possuo um exemplar
             </label>
-            {form.addCopy && (
+            {workForm.addCopy && (
               <div className="nested-fields">
                 <div className="form-row">
                   <label>
                     Formato
-                    <select value={form.format} onChange={(event) => setFormValue(setForm, 'format', event.target.value)}>
+                    <select
+                      value={workForm.format}
+                      onChange={(event) => setFormValue(setWorkForm, 'format', event.target.value)}
+                    >
                       {Object.entries(copyFormatLabels).map(([value, label]) => (
                         <option key={value} value={value}>
                           {label}
@@ -353,16 +445,16 @@ function App() {
                   </label>
                   <label>
                     Localizacao
-                    <input value={form.location} onChange={(event) => setFormValue(setForm, 'location', event.target.value)} />
+                    <input value={workForm.location} onChange={(event) => setFormValue(setWorkForm, 'location', event.target.value)} />
                   </label>
                 </div>
                 <label>
                   Editora
-                  <input value={form.publisher} onChange={(event) => setFormValue(setForm, 'publisher', event.target.value)} />
+                  <input value={workForm.publisher} onChange={(event) => setFormValue(setWorkForm, 'publisher', event.target.value)} />
                 </label>
                 <label>
                   Edicao
-                  <input value={form.edition} onChange={(event) => setFormValue(setForm, 'edition', event.target.value)} />
+                  <input value={workForm.edition} onChange={(event) => setFormValue(setWorkForm, 'edition', event.target.value)} />
                 </label>
               </div>
             )}
@@ -440,7 +532,9 @@ function App() {
         <section className="panel detail-panel">
           {selectedWork ? (
             <WorkDetail
-              addCopy={addCopy}
+              onCopyCreate={openCreateCopyModal}
+              onCopyDelete={deleteCopy}
+              onCopyEdit={openEditCopyModal}
               onRatingChange={updateRating}
               onStatusChange={updateReadingStatus}
               work={selectedWork}
@@ -450,11 +544,26 @@ function App() {
           )}
         </section>
       </section>
+
+      {copyModal && (
+        <CopyModal
+          modal={copyModal}
+          onChange={(field, value) =>
+            setCopyModal((current) => ({
+              ...current,
+              form: { ...current.form, [field]: value },
+            }))
+          }
+          onClose={closeCopyModal}
+          onSubmit={handleCopySubmit}
+          saving={isSaving}
+        />
+      )}
     </main>
   );
 }
 
-function WorkDetail({ addCopy, onRatingChange, onStatusChange, work }) {
+function WorkDetail({ onCopyCreate, onCopyDelete, onCopyEdit, onRatingChange, onStatusChange, work }) {
   return (
     <>
       <div className="detail-heading">
@@ -466,7 +575,7 @@ function WorkDetail({ addCopy, onRatingChange, onStatusChange, work }) {
             {work.originalYear ? `, ${work.originalYear}` : ''}
           </p>
         </div>
-        <button className="ghost-button" onClick={() => addCopy(work)} type="button">
+        <button className="ghost-button" onClick={() => onCopyCreate(work)} type="button">
           Adicionar exemplar
         </button>
       </div>
@@ -503,23 +612,226 @@ function WorkDetail({ addCopy, onRatingChange, onStatusChange, work }) {
       </div>
 
       <div className="detail-section">
-        <h3>Biblioteca</h3>
+        <div className="section-heading">
+          <h3>Biblioteca</h3>
+          <button className="text-button" onClick={() => onCopyCreate(work)} type="button">
+            Novo exemplar
+          </button>
+        </div>
         {work.copies.length === 0 ? (
-          <p className="muted">Voce ainda nao cadastrou um exemplar desta obra.</p>
+          <div className="empty-card">
+            <p>Nenhum exemplar cadastrado para esta obra.</p>
+            <button className="ghost-button" onClick={() => onCopyCreate(work)} type="button">
+              Adicionar exemplar
+            </button>
+          </div>
         ) : (
           <div className="copy-list">
             {work.copies.map((copy) => (
               <article className="copy-item" key={copy.id}>
-                <strong>{copyFormatLabels[copy.format] || copy.format}</strong>
-                <span>{copy.publisher || 'Editora nao informada'}</span>
-                <span>{copy.edition || 'Edicao nao informada'}</span>
-                <span>{copy.location || 'Sem localizacao'}</span>
+                <div className="copy-item-header">
+                  <div>
+                    <strong>{copyFormatLabels[copy.format] || copy.format}</strong>
+                    <span>{[copy.publisher, copy.edition].filter(Boolean).join(' · ') || 'Edicao nao informada'}</span>
+                  </div>
+                  <div className="copy-actions">
+                    <button className="text-button" onClick={() => onCopyEdit(work, copy)} type="button">
+                      Editar
+                    </button>
+                    <button className="danger-button" onClick={() => onCopyDelete(work, copy)} type="button">
+                      Remover
+                    </button>
+                  </div>
+                </div>
+                <div className="copy-meta">
+                  {copy.isbn && <span>ISBN {copy.isbn}</span>}
+                  {copy.publishedYear && <span>{copy.publishedYear}</span>}
+                  {copy.language && <span>{copy.language}</span>}
+                  {copy.pageCount && <span>{copy.pageCount} paginas</span>}
+                  {copy.condition && <span>{copy.condition}</span>}
+                  {copy.location && <span>{copy.location}</span>}
+                  {copy.isGift && <span>Presente</span>}
+                  {copy.isSigned && <span>Autografado</span>}
+                </div>
+                {copy.notes && <p className="muted">{copy.notes}</p>}
               </article>
             ))}
           </div>
         )}
       </div>
     </>
+  );
+}
+
+function CopyModal({ modal, onChange, onClose, onSubmit, saving }) {
+  const title = modal.mode === 'edit' ? 'Editar exemplar' : 'Novo exemplar';
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="copy-modal-title">
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">{modal.work.title}</p>
+            <h2 id="copy-modal-title">{title}</h2>
+          </div>
+          <button className="icon-button" aria-label="Fechar" onClick={onClose} type="button">
+            x
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit}>
+          <div className="form-row">
+            <label>
+              Formato
+              <select value={modal.form.format} onChange={(event) => onChange('format', event.target.value)}>
+                {Object.entries(copyFormatLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Localizacao
+              <input
+                value={modal.form.location}
+                onChange={(event) => onChange('location', event.target.value)}
+                placeholder="Estante sala / Prateleira 2"
+              />
+            </label>
+          </div>
+
+          <div className="form-row">
+            <label>
+              Editora
+              <input value={modal.form.publisher} onChange={(event) => onChange('publisher', event.target.value)} />
+            </label>
+            <label>
+              Edicao
+              <input
+                value={modal.form.edition}
+                onChange={(event) => onChange('edition', event.target.value)}
+                placeholder="Capa dura, bolso, comemorativa"
+              />
+            </label>
+          </div>
+
+          <div className="form-row">
+            <label>
+              ISBN
+              <input value={modal.form.isbn} onChange={(event) => onChange('isbn', event.target.value)} />
+            </label>
+            <label>
+              Estado
+              <input
+                value={modal.form.condition}
+                onChange={(event) => onChange('condition', event.target.value)}
+                placeholder="Novo, bom, gasto"
+              />
+            </label>
+          </div>
+
+          <details className="extra-fields">
+            <summary>Detalhes adicionais</summary>
+            <div className="extra-fields-grid">
+              <div className="form-row">
+                <label>
+                  Ano da edicao
+                  <input
+                    inputMode="numeric"
+                    value={modal.form.publishedYear}
+                    onChange={(event) => onChange('publishedYear', event.target.value)}
+                  />
+                </label>
+                <label>
+                  Idioma
+                  <input value={modal.form.language} onChange={(event) => onChange('language', event.target.value)} />
+                </label>
+              </div>
+
+              <div className="form-row">
+                <label>
+                  Paginas
+                  <input
+                    inputMode="numeric"
+                    value={modal.form.pageCount}
+                    onChange={(event) => onChange('pageCount', event.target.value)}
+                  />
+                </label>
+                <label>
+                  Tipo de aquisicao
+                  <select value={modal.form.acquisitionType} onChange={(event) => onChange('acquisitionType', event.target.value)}>
+                    {Object.entries(acquisitionTypeLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="form-row">
+                <label>
+                  Data de aquisicao
+                  <input
+                    type="date"
+                    value={modal.form.acquisitionDate}
+                    onChange={(event) => onChange('acquisitionDate', event.target.value)}
+                  />
+                </label>
+                <label>
+                  Preco pago
+                  <input
+                    inputMode="decimal"
+                    value={modal.form.pricePaid}
+                    onChange={(event) => onChange('pricePaid', event.target.value)}
+                    placeholder="49.90"
+                  />
+                </label>
+              </div>
+
+              <label>
+                Moeda
+                <input value={modal.form.currency} onChange={(event) => onChange('currency', event.target.value)} />
+              </label>
+
+              <div className="check-grid">
+                <label className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={modal.form.isGift}
+                    onChange={(event) => onChange('isGift', event.target.checked)}
+                  />
+                  Foi presente
+                </label>
+                <label className="check-row">
+                  <input
+                    type="checkbox"
+                    checked={modal.form.isSigned}
+                    onChange={(event) => onChange('isSigned', event.target.checked)}
+                  />
+                  Autografado
+                </label>
+              </div>
+
+              <label>
+                Observacoes
+                <textarea value={modal.form.notes} onChange={(event) => onChange('notes', event.target.value)} rows="3" />
+              </label>
+            </div>
+          </details>
+
+          <div className="modal-actions">
+            <button className="ghost-button" onClick={onClose} type="button">
+              Cancelar
+            </button>
+            <button className="primary-button" disabled={saving} type="submit">
+              {saving ? 'Salvando...' : 'Salvar exemplar'}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
   );
 }
 
@@ -534,6 +846,52 @@ function StatCard({ label, value }) {
 
 function setFormValue(setForm, field, value) {
   setForm((current) => ({ ...current, [field]: value }));
+}
+
+function copyToForm(copy) {
+  return {
+    format: copy.format || 'Physical',
+    publisher: copy.publisher || '',
+    edition: copy.edition || '',
+    isbn: copy.isbn || '',
+    publishedYear: copy.publishedYear || '',
+    language: copy.language || '',
+    pageCount: copy.pageCount || '',
+    condition: copy.condition || '',
+    location: copy.location || '',
+    acquisitionDate: copy.acquisitionDate || '',
+    acquisitionType: copy.acquisitionType || 'Unknown',
+    pricePaid: copy.pricePaid || '',
+    currency: copy.currency || 'BRL',
+    isGift: copy.isGift || false,
+    isSigned: copy.isSigned || false,
+    notes: copy.notes || '',
+  };
+}
+
+function copyFormToPayload(form) {
+  return {
+    format: form.format,
+    publisher: emptyToNull(form.publisher),
+    edition: emptyToNull(form.edition),
+    isbn: emptyToNull(form.isbn),
+    publishedYear: toNumber(form.publishedYear),
+    language: emptyToNull(form.language),
+    pageCount: toNumber(form.pageCount),
+    condition: emptyToNull(form.condition),
+    location: emptyToNull(form.location),
+    acquisitionDate: emptyToNull(form.acquisitionDate),
+    acquisitionType: form.acquisitionType,
+    pricePaid: toNumber(String(form.pricePaid).replace(',', '.')),
+    currency: emptyToNull(form.currency) || 'BRL',
+    isGift: form.isGift,
+    isSigned: form.isSigned,
+    notes: emptyToNull(form.notes),
+  };
+}
+
+function emptyToNull(value) {
+  return value === '' || value === null || value === undefined ? null : value;
 }
 
 function toNumber(value) {
