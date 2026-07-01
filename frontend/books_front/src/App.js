@@ -63,6 +63,17 @@ const emptyCopyForm = {
   notes: '',
 };
 
+const emptyReadingForm = {
+  status: 'Read',
+  startedAt: '',
+  finishedAt: '',
+  rating: '',
+  review: '',
+  notes: '',
+  isFavorite: false,
+  wantToReRead: false,
+};
+
 function App() {
   const [catalog, setCatalog] = useState(null);
   const [activeTab, setActiveTab] = useState('readings');
@@ -70,6 +81,8 @@ function App() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [selectedWorkId, setSelectedWorkId] = useState(null);
   const [workForm, setWorkForm] = useState(emptyWorkForm);
+  const [workModal, setWorkModal] = useState(null);
+  const [readingModal, setReadingModal] = useState(null);
   const [copyModal, setCopyModal] = useState(null);
   const [notice, setNotice] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -219,6 +232,149 @@ function App() {
       await loadCatalog();
     } catch (error) {
       setNotice('Nao consegui atualizar a leitura.');
+    }
+  }
+
+  function openEditWorkModal(work) {
+    setWorkModal({
+      work,
+      form: workToForm(work),
+    });
+  }
+
+  function closeWorkModal() {
+    setWorkModal(null);
+  }
+
+  async function handleWorkSubmit(event) {
+    event.preventDefault();
+    if (!workModal) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/works/${workModal.work.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(workFormToPayload(workModal.form)),
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao atualizar obra.');
+      }
+
+      setSelectedWorkId(workModal.work.id);
+      setNotice('Obra atualizada.');
+      closeWorkModal();
+      await loadCatalog();
+    } catch (error) {
+      setNotice('Nao consegui atualizar a obra.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function deleteWork(work) {
+    const confirmed = window.confirm(`Remover "${work.title}" e todos os seus registros?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/works/${work.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao remover obra.');
+      }
+
+      setSelectedWorkId(null);
+      setNotice('Obra removida.');
+      await loadCatalog();
+    } catch (error) {
+      setNotice('Nao consegui remover a obra.');
+    }
+  }
+
+  function openCreateReadingModal(work) {
+    setReadingModal({
+      mode: 'create',
+      work,
+      reading: null,
+      form: emptyReadingForm,
+    });
+  }
+
+  function openEditReadingModal(work, reading) {
+    setReadingModal({
+      mode: 'edit',
+      work,
+      reading,
+      form: readingToForm(reading),
+    });
+  }
+
+  function closeReadingModal() {
+    setReadingModal(null);
+  }
+
+  async function handleReadingSubmit(event) {
+    event.preventDefault();
+    if (!readingModal) {
+      return;
+    }
+
+    setIsSaving(true);
+    const isEditing = readingModal.mode === 'edit';
+    const url = isEditing
+      ? `${API_BASE_URL}/api/works/${readingModal.work.id}/readings/${readingModal.reading.id}`
+      : `${API_BASE_URL}/api/works/${readingModal.work.id}/readings`;
+
+    try {
+      const response = await fetch(url, {
+        method: isEditing ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(readingFormToPayload(readingModal.form)),
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao salvar leitura.');
+      }
+
+      setSelectedWorkId(readingModal.work.id);
+      setActiveTab('readings');
+      setNotice(isEditing ? 'Leitura atualizada.' : 'Leitura registrada.');
+      closeReadingModal();
+      await loadCatalog();
+    } catch (error) {
+      setNotice('Nao consegui salvar a leitura.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function deleteReading(work, reading) {
+    const confirmed = window.confirm(`Remover esta leitura de "${work.title}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/works/${work.id}/readings/${reading.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao remover leitura.');
+      }
+
+      setSelectedWorkId(work.id);
+      setNotice('Leitura removida.');
+      await loadCatalog();
+    } catch (error) {
+      setNotice('Nao consegui remover a leitura.');
     }
   }
 
@@ -535,8 +691,13 @@ function App() {
               onCopyCreate={openCreateCopyModal}
               onCopyDelete={deleteCopy}
               onCopyEdit={openEditCopyModal}
+              onReadingCreate={openCreateReadingModal}
+              onReadingDelete={deleteReading}
+              onReadingEdit={openEditReadingModal}
               onRatingChange={updateRating}
               onStatusChange={updateReadingStatus}
+              onWorkDelete={deleteWork}
+              onWorkEdit={openEditWorkModal}
               work={selectedWork}
             />
           ) : (
@@ -544,6 +705,36 @@ function App() {
           )}
         </section>
       </section>
+
+      {workModal && (
+        <WorkModal
+          modal={workModal}
+          onChange={(field, value) =>
+            setWorkModal((current) => ({
+              ...current,
+              form: { ...current.form, [field]: value },
+            }))
+          }
+          onClose={closeWorkModal}
+          onSubmit={handleWorkSubmit}
+          saving={isSaving}
+        />
+      )}
+
+      {readingModal && (
+        <ReadingModal
+          modal={readingModal}
+          onChange={(field, value) =>
+            setReadingModal((current) => ({
+              ...current,
+              form: { ...current.form, [field]: value },
+            }))
+          }
+          onClose={closeReadingModal}
+          onSubmit={handleReadingSubmit}
+          saving={isSaving}
+        />
+      )}
 
       {copyModal && (
         <CopyModal
@@ -563,7 +754,19 @@ function App() {
   );
 }
 
-function WorkDetail({ onCopyCreate, onCopyDelete, onCopyEdit, onRatingChange, onStatusChange, work }) {
+function WorkDetail({
+  onCopyCreate,
+  onCopyDelete,
+  onCopyEdit,
+  onReadingCreate,
+  onReadingDelete,
+  onReadingEdit,
+  onRatingChange,
+  onStatusChange,
+  onWorkDelete,
+  onWorkEdit,
+  work,
+}) {
   return (
     <>
       <div className="detail-heading">
@@ -575,15 +778,25 @@ function WorkDetail({ onCopyCreate, onCopyDelete, onCopyEdit, onRatingChange, on
             {work.originalYear ? `, ${work.originalYear}` : ''}
           </p>
         </div>
-        <button className="ghost-button" onClick={() => onCopyCreate(work)} type="button">
-          Adicionar exemplar
-        </button>
+        <div className="copy-actions">
+          <button className="text-button" onClick={() => onWorkEdit(work)} type="button">
+            Editar
+          </button>
+          <button className="danger-button" onClick={() => onWorkDelete(work)} type="button">
+            Remover
+          </button>
+        </div>
       </div>
 
       {work.description && <p className="description">{work.description}</p>}
 
       <div className="detail-section">
-        <h3>Leitura</h3>
+        <div className="section-heading">
+          <h3>Leituras</h3>
+          <button className="text-button" onClick={() => onReadingCreate(work)} type="button">
+            Nova leitura
+          </button>
+        </div>
         <div className="inline-controls">
           <label>
             Status
@@ -609,6 +822,45 @@ function WorkDetail({ onCopyCreate, onCopyDelete, onCopyEdit, onRatingChange, on
         </div>
         {work.reading?.review && <p>{work.reading.review}</p>}
         {work.reading?.notes && <p className="muted">{work.reading.notes}</p>}
+        {work.readings.length === 0 ? (
+          <div className="empty-card">
+            <p>Nenhuma leitura registrada para esta obra.</p>
+            <button className="ghost-button" onClick={() => onReadingCreate(work)} type="button">
+              Registrar leitura
+            </button>
+          </div>
+        ) : (
+          <div className="reading-list">
+            {work.readings.map((reading) => (
+              <article className="reading-item" key={reading.id}>
+                <div className="copy-item-header">
+                  <div>
+                    <strong>{readingStatusLabels[reading.status] || reading.status}</strong>
+                    <span>
+                      {[formatDate(reading.startedAt), formatDate(reading.finishedAt)].filter(Boolean).join(' - ') ||
+                        'Sem datas'}
+                    </span>
+                  </div>
+                  <div className="copy-actions">
+                    <button className="text-button" onClick={() => onReadingEdit(work, reading)} type="button">
+                      Editar
+                    </button>
+                    <button className="danger-button" onClick={() => onReadingDelete(work, reading)} type="button">
+                      Remover
+                    </button>
+                  </div>
+                </div>
+                <div className="copy-meta">
+                  {reading.rating && <span>{reading.rating} estrelas</span>}
+                  {reading.isFavorite && <span>Favorito</span>}
+                  {reading.wantToReRead && <span>Quero reler</span>}
+                </div>
+                {reading.review && <p>{reading.review}</p>}
+                {reading.notes && <p className="muted">{reading.notes}</p>}
+              </article>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="detail-section">
@@ -660,6 +912,159 @@ function WorkDetail({ onCopyCreate, onCopyDelete, onCopyEdit, onRatingChange, on
         )}
       </div>
     </>
+  );
+}
+
+function WorkModal({ modal, onChange, onClose, onSubmit, saving }) {
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="work-modal-title">
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">Obra</p>
+            <h2 id="work-modal-title">Editar obra</h2>
+          </div>
+          <button className="icon-button" aria-label="Fechar" onClick={onClose} type="button">
+            x
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit}>
+          <label>
+            Titulo
+            <input required value={modal.form.title} onChange={(event) => onChange('title', event.target.value)} />
+          </label>
+          <label>
+            Autor
+            <input required value={modal.form.author} onChange={(event) => onChange('author', event.target.value)} />
+          </label>
+          <label>
+            Titulo original
+            <input value={modal.form.originalTitle} onChange={(event) => onChange('originalTitle', event.target.value)} />
+          </label>
+          <div className="form-row">
+            <label>
+              Ano original
+              <input
+                inputMode="numeric"
+                value={modal.form.originalYear}
+                onChange={(event) => onChange('originalYear', event.target.value)}
+              />
+            </label>
+            <label>
+              Genero
+              <input value={modal.form.genre} onChange={(event) => onChange('genre', event.target.value)} />
+            </label>
+          </div>
+          <label>
+            URL da capa
+            <input value={modal.form.coverUrl} onChange={(event) => onChange('coverUrl', event.target.value)} />
+          </label>
+          <label>
+            Descricao
+            <textarea value={modal.form.description} onChange={(event) => onChange('description', event.target.value)} rows="4" />
+          </label>
+          <div className="modal-actions">
+            <button className="ghost-button" onClick={onClose} type="button">
+              Cancelar
+            </button>
+            <button className="primary-button" disabled={saving} type="submit">
+              {saving ? 'Salvando...' : 'Salvar obra'}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function ReadingModal({ modal, onChange, onClose, onSubmit, saving }) {
+  const title = modal.mode === 'edit' ? 'Editar leitura' : 'Nova leitura';
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="reading-modal-title">
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">{modal.work.title}</p>
+            <h2 id="reading-modal-title">{title}</h2>
+          </div>
+          <button className="icon-button" aria-label="Fechar" onClick={onClose} type="button">
+            x
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit}>
+          <div className="form-row">
+            <label>
+              Status
+              <select value={modal.form.status} onChange={(event) => onChange('status', event.target.value)}>
+                {Object.entries(readingStatusLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Nota
+              <select value={modal.form.rating} onChange={(event) => onChange('rating', event.target.value)}>
+                <option value="">Sem nota</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
+            </label>
+          </div>
+          <div className="form-row">
+            <label>
+              Inicio
+              <input type="date" value={modal.form.startedAt} onChange={(event) => onChange('startedAt', event.target.value)} />
+            </label>
+            <label>
+              Fim
+              <input type="date" value={modal.form.finishedAt} onChange={(event) => onChange('finishedAt', event.target.value)} />
+            </label>
+          </div>
+          <div className="check-grid">
+            <label className="check-row">
+              <input
+                type="checkbox"
+                checked={modal.form.isFavorite}
+                onChange={(event) => onChange('isFavorite', event.target.checked)}
+              />
+              Favorito
+            </label>
+            <label className="check-row">
+              <input
+                type="checkbox"
+                checked={modal.form.wantToReRead}
+                onChange={(event) => onChange('wantToReRead', event.target.checked)}
+              />
+              Quero reler
+            </label>
+          </div>
+          <label>
+            Resenha
+            <textarea value={modal.form.review} onChange={(event) => onChange('review', event.target.value)} rows="4" />
+          </label>
+          <label>
+            Notas
+            <textarea value={modal.form.notes} onChange={(event) => onChange('notes', event.target.value)} rows="3" />
+          </label>
+          <div className="modal-actions">
+            <button className="ghost-button" onClick={onClose} type="button">
+              Cancelar
+            </button>
+            <button className="primary-button" disabled={saving} type="submit">
+              {saving ? 'Salvando...' : 'Salvar leitura'}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
   );
 }
 
@@ -848,6 +1253,56 @@ function setFormValue(setForm, field, value) {
   setForm((current) => ({ ...current, [field]: value }));
 }
 
+function workToForm(work) {
+  return {
+    title: work.title || '',
+    author: work.author || '',
+    originalTitle: work.originalTitle || '',
+    originalYear: work.originalYear || '',
+    genre: work.genre || '',
+    description: work.description || '',
+    coverUrl: work.coverUrl || '',
+  };
+}
+
+function workFormToPayload(form) {
+  return {
+    title: form.title,
+    author: form.author,
+    originalTitle: emptyToNull(form.originalTitle),
+    originalYear: toNumber(form.originalYear),
+    genre: emptyToNull(form.genre),
+    description: emptyToNull(form.description),
+    coverUrl: emptyToNull(form.coverUrl),
+  };
+}
+
+function readingToForm(reading) {
+  return {
+    status: reading.status || 'Read',
+    startedAt: reading.startedAt || '',
+    finishedAt: reading.finishedAt || '',
+    rating: reading.rating || '',
+    review: reading.review || '',
+    notes: reading.notes || '',
+    isFavorite: reading.isFavorite || false,
+    wantToReRead: reading.wantToReRead || false,
+  };
+}
+
+function readingFormToPayload(form) {
+  return {
+    status: form.status,
+    startedAt: emptyToNull(form.startedAt),
+    finishedAt: emptyToNull(form.finishedAt),
+    rating: toNumber(form.rating),
+    review: emptyToNull(form.review),
+    notes: emptyToNull(form.notes),
+    isFavorite: form.isFavorite,
+    wantToReRead: form.wantToReRead,
+  };
+}
+
 function copyToForm(copy) {
   return {
     format: copy.format || 'Physical',
@@ -892,6 +1347,14 @@ function copyFormToPayload(form) {
 
 function emptyToNull(value) {
   return value === '' || value === null || value === undefined ? null : value;
+}
+
+function formatDate(value) {
+  if (!value) {
+    return '';
+  }
+
+  return value.split('-').reverse().join('/');
 }
 
 function toNumber(value) {

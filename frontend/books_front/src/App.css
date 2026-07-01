@@ -427,12 +427,14 @@ textarea:focus {
   line-height: 1.5;
 }
 
-.copy-list {
+.copy-list,
+.reading-list {
   display: grid;
   gap: 10px;
 }
 
-.copy-item {
+.copy-item,
+.reading-item {
   background: var(--surface-strong);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -441,7 +443,8 @@ textarea:focus {
   padding: 12px;
 }
 
-.copy-item span {
+.copy-item span,
+.reading-item span {
   color: var(--muted);
   font-size: 0.88rem;
 }

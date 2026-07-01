@@ -117,6 +117,27 @@ app.MapPost("/api/works", async (CreateWorkRequest request, BooksDbContext db) =
 .WithName("CreateWork")
 .WithOpenApi();
 
+app.MapPut("/api/works/{id:guid}", async (Guid id, UpdateWorkRequest request, BooksDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Title) || string.IsNullOrWhiteSpace(request.Author))
+    {
+        return Results.BadRequest("Title and author are required.");
+    }
+
+    var work = await LoadWorks(db).FirstOrDefaultAsync(item => item.Id == id);
+    if (work is null)
+    {
+        return Results.NotFound();
+    }
+
+    UpdateWork(work, request);
+    await db.SaveChangesAsync();
+
+    return Results.Ok(ToWorkSummary(work));
+})
+.WithName("UpdateWork")
+.WithOpenApi();
+
 app.MapPost("/api/works/{id:guid}/readings", async (Guid id, UpsertReadingRequest request, BooksDbContext db) =>
 {
     var work = await LoadWorks(db).FirstOrDefaultAsync(item => item.Id == id);
@@ -164,6 +185,59 @@ app.MapPut("/api/works/{id:guid}/reading", async (Guid id, UpsertReadingRequest 
     return Results.Ok(ToWorkSummary(work));
 })
 .WithName("UpsertCurrentReading")
+.WithOpenApi();
+
+app.MapPut("/api/works/{workId:guid}/readings/{readingId:guid}", async (
+    Guid workId,
+    Guid readingId,
+    UpsertReadingRequest request,
+    BooksDbContext db) =>
+{
+    var work = await LoadWorks(db).FirstOrDefaultAsync(item => item.Id == workId);
+    if (work is null)
+    {
+        return Results.NotFound();
+    }
+
+    var reading = work.Readings.FirstOrDefault(item => item.Id == readingId);
+    if (reading is null)
+    {
+        return Results.NotFound();
+    }
+
+    UpdateReading(reading, request);
+    work.UpdatedAt = DateTimeOffset.UtcNow;
+    await db.SaveChangesAsync();
+
+    return Results.Ok(ToWorkSummary(work));
+})
+.WithName("UpdateReading")
+.WithOpenApi();
+
+app.MapDelete("/api/works/{workId:guid}/readings/{readingId:guid}", async (
+    Guid workId,
+    Guid readingId,
+    BooksDbContext db) =>
+{
+    var work = await LoadWorks(db).FirstOrDefaultAsync(item => item.Id == workId);
+    if (work is null)
+    {
+        return Results.NotFound();
+    }
+
+    var reading = work.Readings.FirstOrDefault(item => item.Id == readingId);
+    if (reading is null)
+    {
+        return Results.NotFound();
+    }
+
+    db.Readings.Remove(reading);
+    work.UpdatedAt = DateTimeOffset.UtcNow;
+    await db.SaveChangesAsync();
+
+    return Results.NoContent();
+})
+.WithName("DeleteReading")
 .WithOpenApi();
 
 app.MapPost("/api/works/{id:guid}/copies", async (Guid id, CreateCopyRequest request, BooksDbContext db) =>
@@ -334,6 +408,18 @@ static CatalogStats ToStats(List<Work> works)
     var readingNowCount = works.Count(work => work.Readings.Any(reading => reading.Status == ReadingStatus.Reading));
 
     return new CatalogStats(works.Count, readCount, ownedCount, readingNowCount);
+}
+
+static void UpdateWork(Work work, UpdateWorkRequest request)
+{
+    work.Title = request.Title.Trim();
+    work.OriginalTitle = request.OriginalTitle?.Trim();
+    work.Author = request.Author.Trim();
+    work.OriginalYear = request.OriginalYear;
+    work.Genre = request.Genre?.Trim();
+    work.Description = request.Description?.Trim();
+    work.CoverUrl = request.CoverUrl?.Trim();
+    work.UpdatedAt = DateTimeOffset.UtcNow;
 }
 
 static Reading CreateReading(Guid workId, UpsertReadingRequest request)
@@ -930,6 +1016,15 @@ record CreateWorkRequest(
     string? CoverUrl,
     UpsertReadingRequest? Reading,
     CreateCopyRequest? Copy);
+
+record UpdateWorkRequest(
+    string Title,
+    string Author,
+    string? OriginalTitle,
+    int? OriginalYear,
+    string? Genre,
+    string? Description,
+    string? CoverUrl);
 
 record UpsertReadingRequest(
     ReadingStatus Status,
