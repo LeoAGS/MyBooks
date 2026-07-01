@@ -1,0 +1,17 @@
+public record CreateCopyRequest(
+    CopyFormat Format,
+    string? Publisher,
+    string? Edition,
+    string? Isbn,
+    int? PublishedYear,
+    string? Language,
+    int? PageCount,
+    string? Condition,
+    string? Location,
+    DateOnly? AcquisitionDate,
+    AcquisitionType AcquisitionType,
+    decimal? PricePaid,
+    string? Currency,
+    bool IsGift,
+    bool IsSigned,
+    string? Notes);
