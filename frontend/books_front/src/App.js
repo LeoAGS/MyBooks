@@ -25,23 +25,23 @@ const acquisitionTypeLabels = {
   Unknown: 'Nao informado',
 };
 
-const emptyWorkForm = {
+const sortOptions = {
+  recent: 'Recentes',
+  title: 'Titulo',
+  author: 'Autor',
+  year: 'Ano',
+  genre: 'Genero',
+  copies: 'Exemplares',
+};
+
+const emptyWorkModalForm = {
   title: '',
   author: '',
+  originalTitle: '',
   originalYear: '',
   genre: '',
   description: '',
-  addReading: true,
-  readingStatus: 'WantToRead',
-  rating: '',
-  notes: '',
-  addCopy: false,
-  format: 'Physical',
-  publisher: '',
-  edition: '',
-  isbn: '',
-  location: '',
-  condition: '',
+  coverUrl: '',
 };
 
 const emptyCopyForm = {
@@ -76,11 +76,10 @@ const emptyReadingForm = {
 
 function App() {
   const [catalog, setCatalog] = useState(null);
-  const [activeTab, setActiveTab] = useState('readings');
+  const [scopeFilter, setScopeFilter] = useState('all');
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [sortMode, setSortMode] = useState('recent');
   const [selectedWorkId, setSelectedWorkId] = useState(null);
-  const [workForm, setWorkForm] = useState(emptyWorkForm);
   const [workModal, setWorkModal] = useState(null);
   const [readingModal, setReadingModal] = useState(null);
   const [copyModal, setCopyModal] = useState(null);
@@ -117,80 +116,56 @@ function App() {
     }
 
     const byId = new Map();
-    [...catalog.readings, ...catalog.library].forEach((work) => byId.set(work.id, work));
-    return [...byId.values()].sort((a, b) => a.title.localeCompare(b.title));
+    [...(catalog.works || []), ...catalog.readings, ...catalog.library].forEach((work) => byId.set(work.id, work));
+    return [...byId.values()];
   }, [catalog]);
 
-  const currentList = activeTab === 'readings' ? catalog?.readings || [] : catalog?.library || [];
-
   const filteredWorks = useMemo(() => {
-    return currentList.filter((work) => {
-      const searchable = `${work.title} ${work.author} ${work.genre || ''}`.toLowerCase();
-      const matchesQuery = searchable.includes(query.toLowerCase());
-      const matchesStatus = statusFilter === 'All' || work.reading?.status === statusFilter;
-      return matchesQuery && (activeTab === 'library' || matchesStatus);
-    });
-  }, [activeTab, currentList, query, statusFilter]);
+    return allWorks
+      .filter((work) => {
+        const searchable = `${work.title} ${work.author} ${work.genre || ''}`.toLowerCase();
+        const matchesQuery = searchable.includes(query.toLowerCase());
+        const matchesScope =
+          scopeFilter === 'all' ||
+          (scopeFilter === 'read' && work.readings?.some((reading) => reading.status === 'Read')) ||
+          (scopeFilter === 'library' && work.copies?.length > 0);
 
-  const selectedWork = allWorks.find((work) => work.id === selectedWorkId) || filteredWorks[0] || allWorks[0];
+        return matchesQuery && matchesScope;
+      })
+      .sort((first, second) => compareWorks(first, second, sortMode));
+  }, [allWorks, query, scopeFilter, sortMode]);
 
-  async function handleCreateWork(event) {
-    event.preventDefault();
-    setIsSaving(true);
-
-    const payload = {
-      title: workForm.title,
-      author: workForm.author,
-      originalYear: toNumber(workForm.originalYear),
-      genre: workForm.genre || null,
-      description: workForm.description || null,
-      reading: workForm.addReading
-        ? {
-            status: workForm.readingStatus,
-            rating: toNumber(workForm.rating),
-            notes: workForm.notes || null,
-            isFavorite: false,
-            wantToReRead: false,
-          }
-        : null,
-      copy: workForm.addCopy
-        ? {
-            format: workForm.format,
-            publisher: workForm.publisher || null,
-            edition: workForm.edition || null,
-            isbn: workForm.isbn || null,
-            location: workForm.location || null,
-            condition: workForm.condition || null,
-            acquisitionType: 'Unknown',
-            currency: 'BRL',
-            isGift: false,
-            isSigned: false,
-          }
-        : null,
+  const selectedWork = filteredWorks.find((work) => work.id === selectedWorkId) || filteredWorks[0] || null;
+  const suggestions = useMemo(() => {
+    const values = {
+      authors: new Set(),
+      genres: new Set(),
+      publishers: new Set(),
+      editions: new Set(),
+      locations: new Set(),
+      languages: new Set(),
+      conditions: new Set(),
+      currencies: new Set(),
     };
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/works`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+    allWorks.forEach((work) => {
+      addSuggestion(values.authors, work.author);
+      addSuggestion(values.genres, work.genre);
+      work.copies?.forEach((copy) => {
+        addSuggestion(values.publishers, copy.publisher);
+        addSuggestion(values.editions, copy.edition);
+        addSuggestion(values.locations, copy.location);
+        addSuggestion(values.languages, copy.language);
+        addSuggestion(values.conditions, copy.condition);
+        addSuggestion(values.currencies, copy.currency);
       });
+    });
 
-      if (!response.ok) {
-        throw new Error('Falha ao salvar obra.');
-      }
+    return Object.fromEntries(
+      Object.entries(values).map(([key, set]) => [key, [...set].sort((a, b) => a.localeCompare(b))])
+    );
+  }, [allWorks]);
 
-      const created = await response.json();
-      setWorkForm(emptyWorkForm);
-      setSelectedWorkId(created.id);
-      setNotice('Obra adicionada ao catalogo.');
-      await loadCatalog();
-    } catch (error) {
-      setNotice('Nao consegui salvar. Verifique se o backend esta rodando.');
-    } finally {
-      setIsSaving(false);
-    }
-  }
 
   async function updateReadingStatus(work, status) {
     const reading = work.reading || {};
@@ -235,8 +210,17 @@ function App() {
     }
   }
 
+  function openCreateWorkModal() {
+    setWorkModal({
+      mode: 'create',
+      work: null,
+      form: emptyWorkModalForm,
+    });
+  }
+
   function openEditWorkModal(work) {
     setWorkModal({
+      mode: 'edit',
       work,
       form: workToForm(work),
     });
@@ -253,23 +237,34 @@ function App() {
     }
 
     setIsSaving(true);
+    const isEditing = workModal.mode === 'edit';
+    const url = isEditing ? `${API_BASE_URL}/api/works/${workModal.work.id}` : `${API_BASE_URL}/api/works`;
+    const payload = isEditing
+      ? workFormToPayload(workModal.form)
+      : {
+          ...workFormToPayload(workModal.form),
+          reading: null,
+          copy: null,
+        };
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/works/${workModal.work.id}`, {
-        method: 'PUT',
+      const response = await fetch(url, {
+        method: isEditing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(workFormToPayload(workModal.form)),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        throw new Error('Falha ao atualizar obra.');
+        throw new Error('Falha ao salvar obra.');
       }
 
-      setSelectedWorkId(workModal.work.id);
-      setNotice('Obra atualizada.');
+      const saved = await response.json();
+      setSelectedWorkId(saved.id || workModal.work.id);
+      setNotice(isEditing ? 'Obra atualizada.' : 'Obra adicionada ao catalogo.');
       closeWorkModal();
       await loadCatalog();
     } catch (error) {
-      setNotice('Nao consegui atualizar a obra.');
+      setNotice('Nao consegui salvar a obra.');
     } finally {
       setIsSaving(false);
     }
@@ -344,7 +339,7 @@ function App() {
       }
 
       setSelectedWorkId(readingModal.work.id);
-      setActiveTab('readings');
+      setScopeFilter('read');
       setNotice(isEditing ? 'Leitura atualizada.' : 'Leitura registrada.');
       closeReadingModal();
       await loadCatalog();
@@ -425,7 +420,7 @@ function App() {
       }
 
       setSelectedWorkId(copyModal.work.id);
-      setActiveTab('library');
+      setScopeFilter('library');
       setNotice(isEditing ? 'Exemplar atualizado.' : 'Exemplar adicionado a biblioteca.');
       closeCopyModal();
       await loadCatalog();
@@ -433,6 +428,29 @@ function App() {
       setNotice('Nao consegui salvar o exemplar.');
     } finally {
       setIsSaving(false);
+    }
+  }
+
+
+  async function downloadCopiesBackup() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/backups/copies.csv`);
+      if (!response.ok) {
+        throw new Error('Falha ao gerar backup.');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'mybooks-exemplares-backup.csv';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setNotice('Backup dos exemplares gerado em CSV.');
+    } catch (error) {
+      setNotice('Nao consegui gerar o backup CSV dos exemplares.');
     }
   }
 
@@ -470,6 +488,12 @@ function App() {
           </p>
         </div>
         <div className="header-actions">
+          <button className="primary-button" onClick={openCreateWorkModal} type="button">
+            Nova obra
+          </button>
+          <button className="ghost-button" onClick={downloadCopiesBackup} type="button">
+            Backup CSV
+          </button>
           <button className="ghost-button" onClick={loadCatalog} type="button">
             Atualizar
           </button>
@@ -478,183 +502,49 @@ function App() {
 
       {notice && <div className="notice">{notice}</div>}
 
-      <section className="stats-grid" aria-label="Resumo do catalogo">
-        <StatCard label="Obras" value={catalog?.stats?.totalWorks || 0} />
-        <StatCard label="Lidas" value={catalog?.stats?.readWorks || 0} />
-        <StatCard label="Na biblioteca" value={catalog?.stats?.ownedWorks || 0} />
-        <StatCard label="Lendo agora" value={catalog?.stats?.readingNow || 0} />
+      <section className="metric-bar" aria-label="Resumo do catalogo">
+        <MetricButton
+          active={scopeFilter === 'all'}
+          label="Obras"
+          onClick={() => setScopeFilter('all')}
+          value={catalog?.stats?.totalWorks || 0}
+        />
+        <MetricButton
+          active={scopeFilter === 'read'}
+          label="Lidas"
+          onClick={() => setScopeFilter('read')}
+          value={catalog?.stats?.readWorks || 0}
+        />
+        <MetricButton
+          active={scopeFilter === 'library'}
+          label="Na biblioteca"
+          onClick={() => setScopeFilter('library')}
+          value={catalog?.stats?.ownedCopies ?? catalog?.stats?.ownedWorks ?? 0}
+        />
       </section>
 
       <section className="workspace">
-        <aside className="panel form-panel">
-          <h2>Nova obra</h2>
-          <form onSubmit={handleCreateWork}>
-            <label>
-              Titulo
-              <input
-                required
-                value={workForm.title}
-                onChange={(event) => setFormValue(setWorkForm, 'title', event.target.value)}
-                placeholder="Ex: Grande Sertao: Veredas"
-              />
-            </label>
-            <label>
-              Autor
-              <input
-                required
-                value={workForm.author}
-                onChange={(event) => setFormValue(setWorkForm, 'author', event.target.value)}
-                placeholder="Ex: Guimaraes Rosa"
-              />
-            </label>
-            <div className="form-row">
-              <label>
-                Ano original
-                <input
-                  inputMode="numeric"
-                  value={workForm.originalYear}
-                  onChange={(event) => setFormValue(setWorkForm, 'originalYear', event.target.value)}
-                />
-              </label>
-              <label>
-                Genero
-                <input value={workForm.genre} onChange={(event) => setFormValue(setWorkForm, 'genre', event.target.value)} />
-              </label>
-            </div>
-            <label>
-              Observacao
-              <textarea
-                value={workForm.description}
-                onChange={(event) => setFormValue(setWorkForm, 'description', event.target.value)}
-                rows="3"
-              />
-            </label>
-
-            <label className="check-row">
-              <input
-                type="checkbox"
-                checked={workForm.addReading}
-                onChange={(event) => setFormValue(setWorkForm, 'addReading', event.target.checked)}
-              />
-              Registrar em leituras
-            </label>
-            {workForm.addReading && (
-              <div className="nested-fields">
-                <label>
-                  Status
-                  <select
-                    value={workForm.readingStatus}
-                    onChange={(event) => setFormValue(setWorkForm, 'readingStatus', event.target.value)}
-                  >
-                    {Object.entries(readingStatusLabels).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Nota
-                  <input
-                    inputMode="numeric"
-                    max="5"
-                    min="1"
-                    value={workForm.rating}
-                    onChange={(event) => setFormValue(setWorkForm, 'rating', event.target.value)}
-                    placeholder="1 a 5"
-                  />
-                </label>
-                <label>
-                  Notas pessoais
-                  <textarea
-                    value={workForm.notes}
-                    onChange={(event) => setFormValue(setWorkForm, 'notes', event.target.value)}
-                    rows="2"
-                  />
-                </label>
-              </div>
-            )}
-
-            <label className="check-row">
-              <input
-                type="checkbox"
-                checked={workForm.addCopy}
-                onChange={(event) => setFormValue(setWorkForm, 'addCopy', event.target.checked)}
-              />
-              Tambem possuo um exemplar
-            </label>
-            {workForm.addCopy && (
-              <div className="nested-fields">
-                <div className="form-row">
-                  <label>
-                    Formato
-                    <select
-                      value={workForm.format}
-                      onChange={(event) => setFormValue(setWorkForm, 'format', event.target.value)}
-                    >
-                      {Object.entries(copyFormatLabels).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Localizacao
-                    <input value={workForm.location} onChange={(event) => setFormValue(setWorkForm, 'location', event.target.value)} />
-                  </label>
-                </div>
-                <label>
-                  Editora
-                  <input value={workForm.publisher} onChange={(event) => setFormValue(setWorkForm, 'publisher', event.target.value)} />
-                </label>
-                <label>
-                  Edicao
-                  <input value={workForm.edition} onChange={(event) => setFormValue(setWorkForm, 'edition', event.target.value)} />
-                </label>
-              </div>
-            )}
-
-            <button className="primary-button" disabled={isSaving} type="submit">
-              {isSaving ? 'Salvando...' : 'Adicionar'}
-            </button>
-          </form>
-        </aside>
-
         <section className="panel list-panel">
           <div className="toolbar">
-            <div className="tabs" role="tablist" aria-label="Areas do catalogo">
-              <button
-                className={activeTab === 'readings' ? 'active' : ''}
-                onClick={() => setActiveTab('readings')}
-                type="button"
-              >
-                Leituras
-              </button>
-              <button
-                className={activeTab === 'library' ? 'active' : ''}
-                onClick={() => setActiveTab('library')}
-                type="button"
-              >
-                Biblioteca
-              </button>
-            </div>
-            <input
-              className="search-input"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por titulo, autor ou genero"
-            />
-            {activeTab === 'readings' && (
-              <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                <option value="All">Todos</option>
-                {Object.entries(readingStatusLabels).map(([value, label]) => (
+            <label className="toolbar-control">
+              Pesquisar
+              <input
+                className="search-input"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Buscar por titulo, autor ou genero"
+              />
+            </label>
+            <label className="toolbar-control">
+              Ordenar
+              <select value={sortMode} onChange={(event) => setSortMode(event.target.value)}>
+                {Object.entries(sortOptions).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
                 ))}
               </select>
-            )}
+            </label>
           </div>
 
           {isLoading ? (
@@ -674,10 +564,11 @@ function App() {
                     <strong>{work.title}</strong>
                     <small>{work.author}</small>
                   </span>
-                  <span className="row-meta">
-                    {activeTab === 'library'
-                      ? `${work.copyCount} exemplar${work.copyCount === 1 ? '' : 'es'}`
-                      : readingStatusLabels[work.reading?.status] || 'Sem leitura'}
+                  <span className="row-tags">
+                    <span className="row-meta">{readingStatusLabels[work.reading?.status] || 'Sem leitura'}</span>
+                    <span className="row-meta">
+                      {work.copyCount} exemplar{work.copyCount === 1 ? '' : 'es'}
+                    </span>
                   </span>
                 </button>
               ))}
@@ -709,6 +600,7 @@ function App() {
       {workModal && (
         <WorkModal
           modal={workModal}
+          suggestions={suggestions}
           onChange={(field, value) =>
             setWorkModal((current) => ({
               ...current,
@@ -739,6 +631,7 @@ function App() {
       {copyModal && (
         <CopyModal
           modal={copyModal}
+          suggestions={suggestions}
           onChange={(field, value) =>
             setCopyModal((current) => ({
               ...current,
@@ -915,14 +808,16 @@ function WorkDetail({
   );
 }
 
-function WorkModal({ modal, onChange, onClose, onSubmit, saving }) {
+function WorkModal({ modal, onChange, onClose, onSubmit, saving, suggestions }) {
+  const title = modal.mode === 'edit' ? 'Editar obra' : 'Nova obra';
+
   return (
     <div className="modal-backdrop" role="presentation">
       <section className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="work-modal-title">
         <div className="modal-heading">
           <div>
             <p className="eyebrow">Obra</p>
-            <h2 id="work-modal-title">Editar obra</h2>
+            <h2 id="work-modal-title">{title}</h2>
           </div>
           <button className="icon-button" aria-label="Fechar" onClick={onClose} type="button">
             x
@@ -936,7 +831,13 @@ function WorkModal({ modal, onChange, onClose, onSubmit, saving }) {
           </label>
           <label>
             Autor
-            <input required value={modal.form.author} onChange={(event) => onChange('author', event.target.value)} />
+            <input
+              list="author-suggestions"
+              required
+              value={modal.form.author}
+              onChange={(event) => onChange('author', event.target.value)}
+            />
+            <SuggestionList id="author-suggestions" options={suggestions.authors} />
           </label>
           <label>
             Titulo original
@@ -953,7 +854,12 @@ function WorkModal({ modal, onChange, onClose, onSubmit, saving }) {
             </label>
             <label>
               Genero
-              <input value={modal.form.genre} onChange={(event) => onChange('genre', event.target.value)} />
+              <input
+                list="genre-suggestions"
+                value={modal.form.genre}
+                onChange={(event) => onChange('genre', event.target.value)}
+              />
+              <SuggestionList id="genre-suggestions" options={suggestions.genres} />
             </label>
           </div>
           <label>
@@ -969,7 +875,7 @@ function WorkModal({ modal, onChange, onClose, onSubmit, saving }) {
               Cancelar
             </button>
             <button className="primary-button" disabled={saving} type="submit">
-              {saving ? 'Salvando...' : 'Salvar obra'}
+              {saving ? 'Salvando...' : modal.mode === 'edit' ? 'Salvar obra' : 'Criar obra'}
             </button>
           </div>
         </form>
@@ -1068,7 +974,7 @@ function ReadingModal({ modal, onChange, onClose, onSubmit, saving }) {
   );
 }
 
-function CopyModal({ modal, onChange, onClose, onSubmit, saving }) {
+function CopyModal({ modal, onChange, onClose, onSubmit, saving, suggestions }) {
   const title = modal.mode === 'edit' ? 'Editar exemplar' : 'Novo exemplar';
 
   return (
@@ -1099,25 +1005,34 @@ function CopyModal({ modal, onChange, onClose, onSubmit, saving }) {
             <label>
               Localizacao
               <input
+                list="location-suggestions"
                 value={modal.form.location}
                 onChange={(event) => onChange('location', event.target.value)}
                 placeholder="Estante sala / Prateleira 2"
               />
+              <SuggestionList id="location-suggestions" options={suggestions.locations} />
             </label>
           </div>
 
           <div className="form-row">
             <label>
               Editora
-              <input value={modal.form.publisher} onChange={(event) => onChange('publisher', event.target.value)} />
+              <input
+                list="publisher-suggestions"
+                value={modal.form.publisher}
+                onChange={(event) => onChange('publisher', event.target.value)}
+              />
+              <SuggestionList id="publisher-suggestions" options={suggestions.publishers} />
             </label>
             <label>
               Edicao
               <input
+                list="edition-suggestions"
                 value={modal.form.edition}
                 onChange={(event) => onChange('edition', event.target.value)}
                 placeholder="Capa dura, bolso, comemorativa"
               />
+              <SuggestionList id="edition-suggestions" options={suggestions.editions} />
             </label>
           </div>
 
@@ -1129,10 +1044,12 @@ function CopyModal({ modal, onChange, onClose, onSubmit, saving }) {
             <label>
               Estado
               <input
+                list="condition-suggestions"
                 value={modal.form.condition}
                 onChange={(event) => onChange('condition', event.target.value)}
                 placeholder="Novo, bom, gasto"
               />
+              <SuggestionList id="condition-suggestions" options={suggestions.conditions} />
             </label>
           </div>
 
@@ -1150,7 +1067,12 @@ function CopyModal({ modal, onChange, onClose, onSubmit, saving }) {
                 </label>
                 <label>
                   Idioma
-                  <input value={modal.form.language} onChange={(event) => onChange('language', event.target.value)} />
+                  <input
+                    list="language-suggestions"
+                    value={modal.form.language}
+                    onChange={(event) => onChange('language', event.target.value)}
+                  />
+                  <SuggestionList id="language-suggestions" options={suggestions.languages} />
                 </label>
               </div>
 
@@ -1197,7 +1119,12 @@ function CopyModal({ modal, onChange, onClose, onSubmit, saving }) {
 
               <label>
                 Moeda
-                <input value={modal.form.currency} onChange={(event) => onChange('currency', event.target.value)} />
+                <input
+                  list="currency-suggestions"
+                  value={modal.form.currency}
+                  onChange={(event) => onChange('currency', event.target.value)}
+                />
+                <SuggestionList id="currency-suggestions" options={suggestions.currencies} />
               </label>
 
               <div className="check-grid">
@@ -1240,17 +1167,87 @@ function CopyModal({ modal, onChange, onClose, onSubmit, saving }) {
   );
 }
 
-function StatCard({ label, value }) {
+
+function SuggestionList({ id, options }) {
   return (
-    <article className="stat-card">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </article>
+    <datalist id={id}>
+      {options.map((option) => (
+        <option key={option} value={option} />
+      ))}
+    </datalist>
   );
 }
 
-function setFormValue(setForm, field, value) {
-  setForm((current) => ({ ...current, [field]: value }));
+function MetricButton({ active, label, onClick, value }) {
+  return (
+    <button className={`metric-button ${active ? 'active' : ''}`} onClick={onClick} type="button">
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+
+
+function compareWorks(first, second, sortMode) {
+  const byTitle = compareText(first.title, second.title);
+
+  if (sortMode === 'title') {
+    return byTitle;
+  }
+
+  if (sortMode === 'author') {
+    return compareText(first.author, second.author) || byTitle;
+  }
+
+  if (sortMode === 'year') {
+    return compareNumber(first.originalYear, second.originalYear) || byTitle;
+  }
+
+  if (sortMode === 'genre') {
+    return compareText(first.genre, second.genre) || byTitle;
+  }
+
+  if (sortMode === 'copies') {
+    return (second.copyCount || 0) - (first.copyCount || 0) || byTitle;
+  }
+
+  return compareDate(second.updatedAt, first.updatedAt) || byTitle;
+}
+
+function compareText(first, second) {
+  return normalizeSortValue(first).localeCompare(normalizeSortValue(second));
+}
+
+function compareNumber(first, second) {
+  if (first == null && second == null) {
+    return 0;
+  }
+
+  if (first == null) {
+    return 1;
+  }
+
+  if (second == null) {
+    return -1;
+  }
+
+  return first - second;
+}
+
+function compareDate(first, second) {
+  return new Date(first || 0).getTime() - new Date(second || 0).getTime();
+}
+
+function normalizeSortValue(value) {
+  return (value || '').trim().toLocaleLowerCase('pt-BR');
+}
+
+function addSuggestion(set, value) {
+  const normalized = value?.trim();
+  if (normalized) {
+    set.add(normalized);
+  }
 }
 
 function workToForm(work) {

@@ -35,10 +35,11 @@ public static class CatalogMapper
     public static CatalogStats ToStats(List<Work> works)
     {
         var readCount = works.Count(work => work.Readings.Any(reading => reading.Status == ReadingStatus.Read));
-        var ownedCount = works.Count(work => work.Copies.Count > 0);
+        var ownedWorksCount = works.Count(work => work.Copies.Count > 0);
+        var ownedCopiesCount = works.Sum(work => work.Copies.Count);
         var readingNowCount = works.Count(work => work.Readings.Any(reading => reading.Status == ReadingStatus.Reading));
 
-        return new CatalogStats(works.Count, readCount, ownedCount, readingNowCount);
+        return new CatalogStats(works.Count, readCount, ownedWorksCount, ownedCopiesCount, readingNowCount);
     }
 
     private static ReadingSummary ToReadingSummary(Reading reading) =>

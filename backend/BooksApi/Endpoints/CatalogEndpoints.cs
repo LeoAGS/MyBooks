@@ -9,6 +9,9 @@ public static class CatalogEndpoints
             var works = await CatalogQueries.LoadWorks(db).ToListAsync();
             var summaries = works.Select(CatalogMapper.ToWorkSummary).ToList();
 
+            var allWorks = summaries
+                .OrderBy(work => work.Title);
+
             var readings = summaries
                 .Where(work => work.Readings.Count > 0)
                 .OrderBy(work => work.Title);
@@ -17,7 +20,7 @@ public static class CatalogEndpoints
                 .Where(work => work.Copies.Count > 0)
                 .OrderBy(work => work.Title);
 
-            return Results.Ok(new CatalogResponse(readings, library, CatalogMapper.ToStats(works)));
+            return Results.Ok(new CatalogResponse(allWorks, readings, library, CatalogMapper.ToStats(works)));
         })
         .WithName("GetCatalog")
         .WithOpenApi();

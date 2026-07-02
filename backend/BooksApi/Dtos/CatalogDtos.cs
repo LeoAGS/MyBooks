@@ -46,6 +46,7 @@ public record CopySummary(
     string? Notes);
 
 public record CatalogResponse(
+    IEnumerable<WorkSummary> Works,
     IEnumerable<WorkSummary> Readings,
     IEnumerable<WorkSummary> Library,
     CatalogStats Stats);
@@ -54,4 +55,5 @@ public record CatalogStats(
     int TotalWorks,
     int ReadWorks,
     int OwnedWorks,
+    int OwnedCopies,
     int ReadingNow);
