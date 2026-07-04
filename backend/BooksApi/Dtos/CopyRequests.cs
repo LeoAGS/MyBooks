@@ -1,11 +1,13 @@
 public record CreateCopyRequest(
     CopyFormat Format,
     string? Publisher,
+    string? EditorialCollection,
     string? Edition,
     string? Isbn,
     int? PublishedYear,
     string? Language,
     int? PageCount,
+    int? VolumeCount,
     string? Condition,
     string? Location,
     DateOnly? AcquisitionDate,

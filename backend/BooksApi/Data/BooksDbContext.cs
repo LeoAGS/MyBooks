@@ -16,6 +16,9 @@ public class BooksDbContext(DbContextOptions<BooksDbContext> options) : DbContex
             entity.Property(work => work.OriginalTitle).HasMaxLength(240);
             entity.Property(work => work.Author).HasMaxLength(180).IsRequired();
             entity.Property(work => work.Genre).HasMaxLength(80);
+            entity.Property(work => work.Category).HasMaxLength(120);
+            entity.Property(work => work.CollectionName).HasMaxLength(180);
+            entity.Property(work => work.CollectionNumber).HasMaxLength(40);
             entity.Property(work => work.CoverUrl).HasMaxLength(500);
             entity.HasMany(work => work.Readings)
                 .WithOne(reading => reading.Work)
@@ -42,10 +45,12 @@ public class BooksDbContext(DbContextOptions<BooksDbContext> options) : DbContex
             entity.Property(copy => copy.Format).HasConversion<string>().HasMaxLength(40);
             entity.Property(copy => copy.AcquisitionType).HasConversion<string>().HasMaxLength(40);
             entity.Property(copy => copy.Publisher).HasMaxLength(180);
+            entity.Property(copy => copy.EditorialCollection).HasMaxLength(180);
             entity.Property(copy => copy.Edition).HasMaxLength(120);
             entity.Property(copy => copy.Isbn).HasMaxLength(32);
-            entity.Property(copy => copy.Language).HasMaxLength(40);
+            entity.Property(copy => copy.Language).HasMaxLength(120);
             entity.Property(copy => copy.Condition).HasMaxLength(80);
+            entity.Property(copy => copy.VolumeCount).HasDefaultValue(1);
             entity.Property(copy => copy.Location).HasMaxLength(180);
             entity.Property(copy => copy.Currency).HasMaxLength(8);
             entity.Property(copy => copy.PricePaid).HasPrecision(10, 2);

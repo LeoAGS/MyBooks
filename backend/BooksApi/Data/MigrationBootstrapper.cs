@@ -9,7 +9,14 @@ public static class MigrationBootstrapper
             return;
         }
 
-        await db.Database.ExecuteSqlRawAsync("""
+        var volumeCountExpression = await ColumnExistsAsync(db, "Copies", "VolumeCount")
+            ? "\"VolumeCount\""
+            : "1";
+        var editorialCollectionExpression = await ColumnExistsAsync(db, "Copies", "EditorialCollection")
+            ? "\"EditorialCollection\""
+            : "NULL";
+
+        var rebuildSql = """
             PRAGMA foreign_keys = OFF;
 
             CREATE TABLE "Copies_new" (
@@ -17,11 +24,13 @@ public static class MigrationBootstrapper
                 "WorkId" TEXT NOT NULL,
                 "Format" TEXT NOT NULL,
                 "Publisher" TEXT NULL,
+                "EditorialCollection" TEXT NULL,
                 "Edition" TEXT NULL,
                 "Isbn" TEXT NULL,
                 "PublishedYear" INTEGER NULL,
                 "Language" TEXT NULL,
                 "PageCount" INTEGER NULL,
+                "VolumeCount" INTEGER NOT NULL DEFAULT 1,
                 "Condition" TEXT NULL,
                 "Location" TEXT NULL,
                 "AcquisitionDate" TEXT NULL,
@@ -41,11 +50,13 @@ public static class MigrationBootstrapper
                 "WorkId",
                 "Format",
                 "Publisher",
+                "EditorialCollection",
                 "Edition",
                 "Isbn",
                 "PublishedYear",
                 "Language",
                 "PageCount",
+                "VolumeCount",
                 "Condition",
                 "Location",
                 "AcquisitionDate",
@@ -63,11 +74,13 @@ public static class MigrationBootstrapper
                 "WorkId",
                 "Format",
                 "Publisher",
+                __EDITORIAL_COLLECTION_EXPRESSION__,
                 "Edition",
                 "Isbn",
                 "PublishedYear",
                 "Language",
                 "PageCount",
+                __VOLUME_COUNT_EXPRESSION__,
                 "Condition",
                 "Location",
                 "AcquisitionDate",
@@ -86,7 +99,68 @@ public static class MigrationBootstrapper
             CREATE INDEX "IX_Copies_WorkId" ON "Copies" ("WorkId");
 
             PRAGMA foreign_keys = ON;
+            """
+            .Replace("__VOLUME_COUNT_EXPRESSION__", volumeCountExpression, StringComparison.Ordinal)
+            .Replace("__EDITORIAL_COLLECTION_EXPRESSION__", editorialCollectionExpression, StringComparison.Ordinal);
+
+        await db.Database.ExecuteSqlRawAsync(rebuildSql);
+    }
+
+    public static async Task EnsureCopyVolumeCountColumnAsync(BooksDbContext db)
+    {
+        if (!await TableExistsAsync(db, "Copies") || await ColumnExistsAsync(db, "Copies", "VolumeCount"))
+        {
+            return;
+        }
+
+        await db.Database.ExecuteSqlRawAsync("""
+            ALTER TABLE "Copies"
+            ADD COLUMN "VolumeCount" INTEGER NOT NULL DEFAULT 1;
             """);
+    }
+
+    public static async Task EnsureCatalogOrganizationColumnsAsync(BooksDbContext db)
+    {
+        await EnsureNullableTextColumnAsync(db, "Works", "Category");
+        await CopyLegacyLiteratureToCategoryAsync(db);
+        await EnsureNullableTextColumnAsync(db, "Works", "CollectionName");
+        await EnsureNullableTextColumnAsync(db, "Works", "CollectionNumber");
+        await EnsureNullableTextColumnAsync(db, "Copies", "EditorialCollection");
+    }
+
+    private static async Task CopyLegacyLiteratureToCategoryAsync(BooksDbContext db)
+    {
+        if (!await TableExistsAsync(db, "Works") ||
+            !await ColumnExistsAsync(db, "Works", "Category") ||
+            !await ColumnExistsAsync(db, "Works", "Literature"))
+        {
+            return;
+        }
+
+        await db.Database.ExecuteSqlRawAsync("""
+            UPDATE "Works"
+            SET "Category" = "Literature"
+            WHERE ("Category" IS NULL OR "Category" = '')
+              AND "Literature" IS NOT NULL
+              AND "Literature" <> '';
+            """);
+    }
+
+    private static async Task EnsureNullableTextColumnAsync(BooksDbContext db, string tableName, string columnName)
+    {
+        if (!await TableExistsAsync(db, tableName) || await ColumnExistsAsync(db, tableName, columnName))
+        {
+            return;
+        }
+
+        var alterSql = """
+            ALTER TABLE "__TABLE_NAME__"
+            ADD COLUMN "__COLUMN_NAME__" TEXT NULL;
+            """
+            .Replace("__TABLE_NAME__", tableName, StringComparison.Ordinal)
+            .Replace("__COLUMN_NAME__", columnName, StringComparison.Ordinal);
+
+        await db.Database.ExecuteSqlRawAsync(alterSql);
     }
 
     public static async Task MarkLegacyDatabaseAsMigratedAsync(BooksDbContext db)

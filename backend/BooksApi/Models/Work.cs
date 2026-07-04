@@ -6,6 +6,9 @@ public class Work
     public string Author { get; set; } = "";
     public int? OriginalYear { get; set; }
     public string? Genre { get; set; }
+    public string? Category { get; set; }
+    public string? CollectionName { get; set; }
+    public string? CollectionNumber { get; set; }
     public string? Description { get; set; }
     public string? CoverUrl { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

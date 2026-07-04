@@ -49,6 +49,10 @@ namespace BooksApi.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("EditorialCollection")
+                        .HasMaxLength(180)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Format")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -65,7 +69,7 @@ namespace BooksApi.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Language")
-                        .HasMaxLength(40)
+                        .HasMaxLength(120)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Location")
@@ -77,6 +81,11 @@ namespace BooksApi.Migrations
 
                     b.Property<int?>("PageCount")
                         .HasColumnType("INTEGER");
+
+                    b.Property<int>("VolumeCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(1);
 
                     b.Property<decimal?>("PricePaid")
                         .HasPrecision(10, 2)
@@ -168,11 +177,23 @@ namespace BooksApi.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("CollectionName")
+                        .HasMaxLength(180)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CollectionNumber")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Description")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Genre")
                         .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(120)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("OriginalTitle")

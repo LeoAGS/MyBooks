@@ -4,6 +4,9 @@ public record CreateWorkRequest(
     string? OriginalTitle,
     int? OriginalYear,
     string? Genre,
+    string? Category,
+    string? CollectionName,
+    string? CollectionNumber,
     string? Description,
     string? CoverUrl,
     UpsertReadingRequest? Reading,
@@ -15,5 +18,8 @@ public record UpdateWorkRequest(
     string? OriginalTitle,
     int? OriginalYear,
     string? Genre,
+    string? Category,
+    string? CollectionName,
+    string? CollectionNumber,
     string? Description,
     string? CoverUrl);

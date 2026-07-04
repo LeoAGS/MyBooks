@@ -5,11 +5,13 @@ public class LibraryCopy
     public Work? Work { get; set; }
     public CopyFormat Format { get; set; }
     public string? Publisher { get; set; }
+    public string? EditorialCollection { get; set; }
     public string? Edition { get; set; }
     public string? Isbn { get; set; }
     public int? PublishedYear { get; set; }
     public string? Language { get; set; }
     public int? PageCount { get; set; }
+    public int VolumeCount { get; set; } = 1;
     public string? Condition { get; set; }
     public string? Location { get; set; }
     public DateOnly? AcquisitionDate { get; set; }

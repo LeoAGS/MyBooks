@@ -31,11 +31,13 @@ public static class CatalogMutations
             WorkId = workId,
             Format = request.Format,
             Publisher = request.Publisher?.Trim(),
+            EditorialCollection = request.EditorialCollection?.Trim(),
             Edition = request.Edition?.Trim(),
             Isbn = request.Isbn?.Trim(),
             PublishedYear = request.PublishedYear,
             Language = request.Language?.Trim(),
             PageCount = request.PageCount,
+            VolumeCount = NormalizeVolumeCount(request.VolumeCount),
             Condition = request.Condition?.Trim(),
             Location = request.Location?.Trim(),
             AcquisitionDate = request.AcquisitionDate,
@@ -57,6 +59,9 @@ public static class CatalogMutations
         work.Author = request.Author.Trim();
         work.OriginalYear = request.OriginalYear;
         work.Genre = request.Genre?.Trim();
+        work.Category = request.Category?.Trim();
+        work.CollectionName = request.CollectionName?.Trim();
+        work.CollectionNumber = request.CollectionNumber?.Trim();
         work.Description = request.Description?.Trim();
         work.CoverUrl = request.CoverUrl?.Trim();
         work.UpdatedAt = DateTimeOffset.UtcNow;
@@ -79,11 +84,13 @@ public static class CatalogMutations
     {
         copy.Format = request.Format;
         copy.Publisher = request.Publisher?.Trim();
+        copy.EditorialCollection = request.EditorialCollection?.Trim();
         copy.Edition = request.Edition?.Trim();
         copy.Isbn = request.Isbn?.Trim();
         copy.PublishedYear = request.PublishedYear;
         copy.Language = request.Language?.Trim();
         copy.PageCount = request.PageCount;
+        copy.VolumeCount = NormalizeVolumeCount(request.VolumeCount);
         copy.Condition = request.Condition?.Trim();
         copy.Location = request.Location?.Trim();
         copy.AcquisitionDate = request.AcquisitionDate;
@@ -95,4 +102,6 @@ public static class CatalogMutations
         copy.Notes = request.Notes?.Trim();
         copy.UpdatedAt = DateTimeOffset.UtcNow;
     }
+
+    private static int NormalizeVolumeCount(int? volumeCount) => Math.Max(1, volumeCount.GetValueOrDefault(1));
 }

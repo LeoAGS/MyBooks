@@ -27,6 +27,8 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
     await MigrationBootstrapper.MarkLegacyDatabaseAsMigratedAsync(db);
     await MigrationBootstrapper.RemoveLegacyLoanColumnsAsync(db);
+    await MigrationBootstrapper.EnsureCopyVolumeCountColumnAsync(db);
+    await MigrationBootstrapper.EnsureCatalogOrganizationColumnsAsync(db);
     await db.Database.MigrateAsync();
     await SeedData.EnsureSeededAsync(db);
 }
