@@ -16,6 +16,9 @@ function WorkDetail({
     return <div className="empty-state">Selecione uma obra para ver os detalhes.</div>;
   }
 
+  const copyTotal = work.copies.length;
+  const volumeTotal = work.copies.reduce((total, copy) => total + Math.max(1, copy.volumeCount || 1), 0);
+
   return (
     <>
       <div className="detail-heading">
@@ -106,7 +109,14 @@ function WorkDetail({
 
       <div className="detail-section">
         <div className="section-heading">
-          <h3>Biblioteca</h3>
+          <div>
+            <h3>Biblioteca</h3>
+            {copyTotal > 0 && (
+              <p className="section-summary">
+                {copyTotal} exemplar{copyTotal === 1 ? '' : 'es'} · {volumeTotal} volume{volumeTotal === 1 ? '' : 's'}
+              </p>
+            )}
+          </div>
           <button className="text-button" onClick={() => onCopyCreate(work)} type="button">
             Novo exemplar
           </button>

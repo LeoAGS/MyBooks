@@ -20,14 +20,14 @@ import {
 } from './utils/formMappers';
 import { compareWorks } from './utils/sortWorks';
 import { buildSuggestions } from './utils/suggestions';
-import { workGroupOptions } from './utils/groupWorks';
+import { groupOptionsByScope } from './utils/groupWorks';
 
 function App() {
   const [catalog, setCatalog] = useState(null);
   const [scopeFilter, setScopeFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [sortMode, setSortMode] = useState('recent');
-  const [workGroupMode, setWorkGroupMode] = useState('all');
+  const [groupModes, setGroupModes] = useState({ all: 'all', read: 'all', library: 'all' });
   const [selectedWorkId, setSelectedWorkId] = useState(null);
   const [workModal, setWorkModal] = useState(null);
   const [readingModal, setReadingModal] = useState(null);
@@ -71,7 +71,7 @@ function App() {
         const matchesQuery = searchable.includes(query.toLowerCase());
         const matchesScope =
           scopeFilter === 'all' ||
-          (scopeFilter === 'read' && work.readings?.some((reading) => reading.status === 'Read')) ||
+          (scopeFilter === 'read' && work.readings?.length > 0) ||
           (scopeFilter === 'library' && work.copies?.length > 0);
 
         return matchesQuery && matchesScope;
@@ -79,7 +79,31 @@ function App() {
       .sort((first, second) => compareWorks(first, second, sortMode));
   }, [allWorks, query, scopeFilter, sortMode]);
 
-  const activeWorkGroupMode = scopeFilter === 'all' ? workGroupMode : 'all';
+  const activeGroupMode = groupModes[scopeFilter] || 'all';
+  const activeGroupOptions = groupOptionsByScope[scopeFilter] || groupOptionsByScope.all;
+
+  function handleGroupModeChange(groupMode) {
+    setGroupModes((current) => ({ ...current, [scopeFilter]: groupMode }));
+  }
+
+  const catalogStats = useMemo(() => {
+    if (!catalog?.stats) {
+      return null;
+    }
+
+    const ownedVolumes =
+      catalog.stats.ownedVolumes ??
+      (catalog.library || []).reduce(
+        (total, work) => total + (work.copies || []).reduce((copyTotal, copy) => copyTotal + Math.max(1, copy.volumeCount || 1), 0),
+        0
+      );
+
+    return {
+      ...catalog.stats,
+      ownedVolumes,
+      readingWorks: catalog.readings?.length ?? catalog.stats.readWorks,
+    };
+  }, [catalog]);
   const selectedWork = filteredWorks.find((work) => work.id === selectedWorkId) || filteredWorks[0] || null;
   const suggestions = useMemo(() => buildSuggestions(allWorks), [allWorks]);
 
@@ -308,18 +332,20 @@ function App() {
 
       {notice && <div className="notice">{notice}</div>}
 
-      <MetricBar scopeFilter={scopeFilter} stats={catalog?.stats} onScopeChange={setScopeFilter} />
+      <MetricBar scopeFilter={scopeFilter} stats={catalogStats} onScopeChange={setScopeFilter} />
       <GroupBar
-        groupMode={activeWorkGroupMode}
-        groupOptions={workGroupOptions}
-        visible={scopeFilter === 'all'}
-        onGroupModeChange={setWorkGroupMode}
+        groupMode={activeGroupMode}
+        groupOptions={activeGroupOptions}
+        scopeFilter={scopeFilter}
+        visible
+        onGroupModeChange={handleGroupModeChange}
       />
 
       <section className="workspace">
         <WorkList
           isLoading={isLoading}
-          groupMode={activeWorkGroupMode}
+          groupMode={activeGroupMode}
+          scopeFilter={scopeFilter}
           onQueryChange={setQuery}
           onSelectWork={setSelectedWorkId}
           onSortModeChange={setSortMode}

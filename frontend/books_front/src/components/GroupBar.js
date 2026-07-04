@@ -1,10 +1,10 @@
-function GroupBar({ groupMode, groupOptions, onGroupModeChange, visible }) {
+function GroupBar({ groupMode, groupOptions, onGroupModeChange, scopeFilter, visible }) {
   if (!visible) {
     return null;
   }
 
   return (
-    <nav className="group-bar" aria-label="Agrupar obras">
+    <nav className="group-bar" aria-label={`Agrupar ${scopeFilter}`}>
       {Object.entries(groupOptions).map(([value, label]) => (
         <button
           className={`group-tab ${groupMode === value ? 'active' : ''}`}

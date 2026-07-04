@@ -40,9 +40,10 @@ public static class CatalogMapper
         var readCount = works.Count(work => work.Readings.Any(reading => reading.Status == ReadingStatus.Read));
         var ownedWorksCount = works.Count(work => work.Copies.Count > 0);
         var ownedCopiesCount = works.Sum(work => work.Copies.Count);
+        var ownedVolumesCount = works.Sum(work => work.Copies.Sum(copy => Math.Max(1, copy.VolumeCount)));
         var readingNowCount = works.Count(work => work.Readings.Any(reading => reading.Status == ReadingStatus.Reading));
 
-        return new CatalogStats(works.Count, readCount, ownedWorksCount, ownedCopiesCount, readingNowCount);
+        return new CatalogStats(works.Count, readCount, ownedWorksCount, ownedCopiesCount, ownedVolumesCount, readingNowCount);
     }
 
     private static ReadingSummary ToReadingSummary(Reading reading) =>

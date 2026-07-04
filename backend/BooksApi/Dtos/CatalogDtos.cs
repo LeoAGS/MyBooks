@@ -61,4 +61,5 @@ public record CatalogStats(
     int ReadWorks,
     int OwnedWorks,
     int OwnedCopies,
+    int OwnedVolumes,
     int ReadingNow);
