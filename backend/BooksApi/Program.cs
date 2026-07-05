@@ -29,6 +29,9 @@ using (var scope = app.Services.CreateScope())
     await MigrationBootstrapper.RemoveLegacyLoanColumnsAsync(db);
     await MigrationBootstrapper.EnsureCopyVolumeCountColumnAsync(db);
     await MigrationBootstrapper.EnsureCatalogOrganizationColumnsAsync(db);
+    await MigrationBootstrapper.RemoveLegacyLiteratureColumnAsync(db);
+    await MigrationBootstrapper.EnsureCopyWorksTableAsync(db);
+    await MigrationBootstrapper.MarkConsolidatedSchemaMigrationIfAlreadyAppliedAsync(db);
     await db.Database.MigrateAsync();
     await SeedData.EnsureSeededAsync(db);
 }

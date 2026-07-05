@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import * as catalogApi from './api/catalogApi';
 import './App.css';
 import AppHeader from './components/AppHeader';
+import CopyDetail from './components/CopyDetail';
 import CopyModal from './components/CopyModal';
 import GroupBar from './components/GroupBar';
 import MetricBar from './components/MetricBar';
@@ -18,7 +19,9 @@ import {
   workFormToPayload,
   workToForm,
 } from './utils/formMappers';
-import { compareWorks } from './utils/sortWorks';
+import { useCatalogSelection } from './hooks/useCatalogSelection';
+import { buildLibraryItems } from './utils/buildLibraryItems';
+import { filterCatalogItems } from './utils/filterCatalogItems';
 import { buildSuggestions } from './utils/suggestions';
 import { groupOptionsByScope } from './utils/groupWorks';
 
@@ -28,7 +31,6 @@ function App() {
   const [query, setQuery] = useState('');
   const [sortMode, setSortMode] = useState('recent');
   const [groupModes, setGroupModes] = useState({ all: 'all', read: 'all', library: 'all' });
-  const [selectedWorkId, setSelectedWorkId] = useState(null);
   const [workModal, setWorkModal] = useState(null);
   const [readingModal, setReadingModal] = useState(null);
   const [copyModal, setCopyModal] = useState(null);
@@ -64,20 +66,12 @@ function App() {
     return [...byId.values()];
   }, [catalog]);
 
-  const filteredWorks = useMemo(() => {
-    return allWorks
-      .filter((work) => {
-        const searchable = `${work.title} ${work.author} ${work.genre || ''} ${work.category || ''}`.toLowerCase();
-        const matchesQuery = searchable.includes(query.toLowerCase());
-        const matchesScope =
-          scopeFilter === 'all' ||
-          (scopeFilter === 'read' && work.readings?.length > 0) ||
-          (scopeFilter === 'library' && work.copies?.length > 0);
+  const libraryItems = useMemo(() => buildLibraryItems(allWorks), [allWorks]);
 
-        return matchesQuery && matchesScope;
-      })
-      .sort((first, second) => compareWorks(first, second, sortMode));
-  }, [allWorks, query, scopeFilter, sortMode]);
+  const filteredItems = useMemo(
+    () => filterCatalogItems({ allWorks, libraryItems, query, scopeFilter, sortMode }),
+    [allWorks, libraryItems, query, scopeFilter, sortMode]
+  );
 
   const activeGroupMode = groupModes[scopeFilter] || 'all';
   const activeGroupOptions = groupOptionsByScope[scopeFilter] || groupOptionsByScope.all;
@@ -104,7 +98,14 @@ function App() {
       readingWorks: catalog.readings?.length ?? catalog.stats.readWorks,
     };
   }, [catalog]);
-  const selectedWork = filteredWorks.find((work) => work.id === selectedWorkId) || filteredWorks[0] || null;
+  const {
+    selectedCopy,
+    selectedItem,
+    selectedWork,
+    selectListItem,
+    setSelectedCopyId,
+    setSelectedWorkId,
+  } = useCatalogSelection({ allWorks, filteredItems, scopeFilter });
   const suggestions = useMemo(() => buildSuggestions(allWorks), [allWorks]);
 
   function openCreateWorkModal() {
@@ -275,13 +276,12 @@ function App() {
     const isEditing = copyModal.mode === 'edit';
 
     try {
-      if (isEditing) {
-        await catalogApi.updateCopy(copyModal.work.id, copyModal.copy.id, payload);
-      } else {
-        await catalogApi.createCopy(copyModal.work.id, payload);
-      }
+      const savedCopy = isEditing
+        ? await catalogApi.updateCopy(copyModal.work.id, copyModal.copy.id, payload)
+        : await catalogApi.createCopy(copyModal.work.id, payload);
 
       setSelectedWorkId(copyModal.work.id);
+      setSelectedCopyId(savedCopy?.id || copyModal.copy?.id || null);
       setScopeFilter('library');
       setNotice(isEditing ? 'Exemplar atualizado.' : 'Exemplar adicionado a biblioteca.');
       closeCopyModal();
@@ -319,6 +319,7 @@ function App() {
     try {
       await catalogApi.deleteCopy(work.id, copy.id);
       setSelectedWorkId(work.id);
+      setSelectedCopyId(null);
       setNotice('Exemplar removido.');
       await loadCatalog();
     } catch (error) {
@@ -347,26 +348,36 @@ function App() {
           groupMode={activeGroupMode}
           scopeFilter={scopeFilter}
           onQueryChange={setQuery}
-          onSelectWork={setSelectedWorkId}
+          onSelectWork={selectListItem}
           onSortModeChange={setSortMode}
           query={query}
-          selectedWork={selectedWork}
+          selectedWork={selectedItem}
           sortMode={sortMode}
-          works={filteredWorks}
+          works={filteredItems}
         />
 
         <section className="panel detail-panel">
-          <WorkDetail
-            onCopyCreate={openCreateCopyModal}
-            onCopyDelete={deleteCopy}
-            onCopyEdit={openEditCopyModal}
-            onReadingCreate={openCreateReadingModal}
-            onReadingDelete={deleteReading}
-            onReadingEdit={openEditReadingModal}
-            onWorkDelete={deleteWork}
-            onWorkEdit={openEditWorkModal}
-            work={selectedWork}
-          />
+          {scopeFilter === 'library' ? (
+            <CopyDetail
+              copyItem={selectedItem}
+              onCopyDelete={deleteCopy}
+              onCopyEdit={openEditCopyModal}
+              work={selectedWork}
+            />
+          ) : (
+            <WorkDetail
+              onCopyCreate={openCreateCopyModal}
+              onCopyDelete={deleteCopy}
+              onCopyEdit={openEditCopyModal}
+              onReadingCreate={openCreateReadingModal}
+              onReadingDelete={deleteReading}
+              onReadingEdit={openEditReadingModal}
+              onWorkDelete={deleteWork}
+              onWorkEdit={openEditWorkModal}
+              selectedCopyId={selectedCopy?.id || null}
+              work={selectedWork}
+            />
+          )}
         </section>
       </section>
 
@@ -403,6 +414,7 @@ function App() {
 
       {copyModal && (
         <CopyModal
+          allWorks={allWorks}
           modal={copyModal}
           suggestions={suggestions}
           onChange={(field, value) =>

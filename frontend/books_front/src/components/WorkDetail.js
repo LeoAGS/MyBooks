@@ -11,6 +11,7 @@ function WorkDetail({
   onReadingEdit,
   onWorkDelete,
   onWorkEdit,
+  selectedCopyId,
   work,
 }) {
   if (!work) {
@@ -19,6 +20,20 @@ function WorkDetail({
 
   const copyTotal = work.copies.length;
   const volumeTotal = work.copies.reduce((total, copy) => total + Math.max(1, copy.volumeCount || 1), 0);
+  const workChips = [
+    work.category,
+    work.genre,
+    [work.collectionName, work.collectionNumber].filter(Boolean).join(' #'),
+  ].filter(Boolean);
+  const displayedCopies = [...work.copies].sort((first, second) => {
+    if (first.id === selectedCopyId) {
+      return -1;
+    }
+    if (second.id === selectedCopyId) {
+      return 1;
+    }
+    return (first.copyTitle || '').localeCompare(second.copyTitle || '') || first.id.localeCompare(second.id);
+  });
 
   return (
     <>
@@ -49,12 +64,13 @@ function WorkDetail({
         </div>
       </div>
 
-      <div className="copy-meta work-meta">
-        {work.category && <span>{work.category}</span>}
-        {work.collectionName && (
-          <span>{[work.collectionName, work.collectionNumber].filter(Boolean).join(' #')}</span>
-        )}
-      </div>
+      {workChips.length > 0 && (
+        <div className="copy-meta work-meta detail-chip-row">
+          {workChips.map((chip) => (
+            <span key={chip}>{chip}</span>
+          ))}
+        </div>
+      )}
 
       {work.description && <p className="description">{work.description}</p>}
 
@@ -134,14 +150,14 @@ function WorkDetail({
           </div>
         ) : (
           <div className="copy-list">
-            {work.copies.map((copy) => (
-              <article className="copy-item" key={copy.id}>
+            {displayedCopies.map((copy) => (
+              <article className={`copy-item ${copy.id === selectedCopyId ? 'selected-copy-item' : ''}`} key={copy.id}>
                 <div className="copy-item-header">
                   <div>
-                    <strong>{copyFormatLabels[copy.format] || copy.format}</strong>
+                    <strong>{copy.copyTitle || copyFormatLabels[copy.format] || copy.format}</strong>
                     <span>
                       {[copy.publisher, copy.editorialCollection, copy.edition].filter(Boolean).join(' · ') ||
-                        'Edicao nao informada'}
+                        (copy.copyTitle ? copyFormatLabels[copy.format] || copy.format : 'Edicao nao informada')}
                     </span>
                   </div>
                   <div className="copy-actions">
@@ -168,7 +184,14 @@ function WorkDetail({
                   {copy.location && <span>{copy.location}</span>}
                   {copy.isGift && <span>Presente</span>}
                   {copy.isSigned && <span>Autografado</span>}
+                  {copy.containedWorks?.length > 1 && <span>Contem {copy.containedWorks.length} obras</span>}
                 </div>
+                {copy.containedWorks?.length > 1 && (
+                  <div className="contained-copy-works">
+                    <strong>Obras contidas</strong>
+                    <span>{copy.containedWorks.map((containedWork) => containedWork.title).join(' · ')}</span>
+                  </div>
+                )}
                 {copy.notes && <p className="muted">{copy.notes}</p>}
               </article>
             ))}

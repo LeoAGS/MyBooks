@@ -5,6 +5,7 @@ public class BooksDbContext(DbContextOptions<BooksDbContext> options) : DbContex
     public DbSet<Work> Works => Set<Work>();
     public DbSet<Reading> Readings => Set<Reading>();
     public DbSet<LibraryCopy> Copies => Set<LibraryCopy>();
+    public DbSet<CopyWork> CopyWorks => Set<CopyWork>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -44,6 +45,7 @@ public class BooksDbContext(DbContextOptions<BooksDbContext> options) : DbContex
             entity.HasKey(copy => copy.Id);
             entity.Property(copy => copy.Format).HasConversion<string>().HasMaxLength(40);
             entity.Property(copy => copy.AcquisitionType).HasConversion<string>().HasMaxLength(40);
+            entity.Property(copy => copy.CopyTitle).HasMaxLength(240);
             entity.Property(copy => copy.Publisher).HasMaxLength(180);
             entity.Property(copy => copy.EditorialCollection).HasMaxLength(180);
             entity.Property(copy => copy.Edition).HasMaxLength(120);
@@ -55,5 +57,21 @@ public class BooksDbContext(DbContextOptions<BooksDbContext> options) : DbContex
             entity.Property(copy => copy.Currency).HasMaxLength(8);
             entity.Property(copy => copy.PricePaid).HasPrecision(10, 2);
         });
+
+        modelBuilder.Entity<CopyWork>(entity =>
+        {
+            entity.ToTable("CopyWorks");
+            entity.HasKey(copyWork => new { copyWork.CopyId, copyWork.WorkId });
+            entity.Property(copyWork => copyWork.Notes).HasMaxLength(240);
+            entity.HasOne(copyWork => copyWork.Copy)
+                .WithMany(copy => copy.ContainedWorks)
+                .HasForeignKey(copyWork => copyWork.CopyId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(copyWork => copyWork.Work)
+                .WithMany(work => work.ContainedInCopies)
+                .HasForeignKey(copyWork => copyWork.WorkId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
     }
 }

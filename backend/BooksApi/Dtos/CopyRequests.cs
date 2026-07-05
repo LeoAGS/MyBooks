@@ -1,4 +1,5 @@
 public record CreateCopyRequest(
+    string? CopyTitle,
     CopyFormat Format,
     string? Publisher,
     string? EditorialCollection,
@@ -16,4 +17,5 @@ public record CreateCopyRequest(
     string? Currency,
     bool IsGift,
     bool IsSigned,
-    string? Notes);
+    string? Notes,
+    IReadOnlyCollection<Guid>? ContainedWorkIds);

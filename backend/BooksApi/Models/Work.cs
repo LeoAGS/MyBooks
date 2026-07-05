@@ -15,4 +15,5 @@ public class Work
     public DateTimeOffset UpdatedAt { get; set; }
     public List<Reading> Readings { get; set; } = [];
     public List<LibraryCopy> Copies { get; set; } = [];
+    public List<CopyWork> ContainedInCopies { get; set; } = [];
 }

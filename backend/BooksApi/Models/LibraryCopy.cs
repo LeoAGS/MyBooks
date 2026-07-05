@@ -3,6 +3,7 @@ public class LibraryCopy
     public Guid Id { get; set; }
     public Guid WorkId { get; set; }
     public Work? Work { get; set; }
+    public string? CopyTitle { get; set; }
     public CopyFormat Format { get; set; }
     public string? Publisher { get; set; }
     public string? EditorialCollection { get; set; }
@@ -23,4 +24,5 @@ public class LibraryCopy
     public string? Notes { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+    public List<CopyWork> ContainedWorks { get; set; } = [];
 }

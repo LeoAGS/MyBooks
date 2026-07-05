@@ -43,7 +43,7 @@ function WorkList({
             className="search-input"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Buscar por titulo, autor, genero ou categoria"
+            placeholder={scopeFilter === 'library' ? 'Buscar por exemplar, obra, autor, editora ou ISBN' : 'Buscar por titulo, autor, genero ou categoria'}
           />
         </label>
         <label className="toolbar-control">
@@ -87,18 +87,19 @@ function WorkList({
                   <button
                     className={`work-row ${selectedWork?.id === work.id ? 'selected' : ''}`}
                     key={work.id}
-                    onClick={() => onSelectWork(work.id)}
+                    onClick={() => onSelectWork(work)}
                     type="button"
                   >
                     <BookCover author={work.author} className="book-cover-small" title={work.title} url={work.coverUrl} />
                     <span className="work-row-main">
-                      <strong>{work.title}</strong>
-                      <small>{work.author}</small>
+                      <strong>{work.displayTitle || work.title}</strong>
+                      <small>{work.subtitle || work.author}</small>
                       <span className="row-tags">
-                        <span className="row-meta">{readingStatusLabels[work.reading?.status] || 'Sem leitura'}</span>
-                        <span className="row-meta">
-                          {work.copyCount} exemplar{work.copyCount === 1 ? '' : 'es'}
-                        </span>
+                        {getRowMeta(work, scopeFilter).map((meta) => (
+                          <span className="row-meta" key={meta}>
+                            {meta}
+                          </span>
+                        ))}
                       </span>
                     </span>
                   </button>
@@ -109,6 +110,18 @@ function WorkList({
       )}
     </section>
   );
+}
+
+
+function getRowMeta(work, scopeFilter) {
+  if (scopeFilter === 'library' && work.rowMeta?.length) {
+    return work.rowMeta;
+  }
+
+  return [
+    readingStatusLabels[work.reading?.status] || 'Sem leitura',
+    `${work.copyCount} exemplar${work.copyCount === 1 ? '' : 'es'}`,
+  ];
 }
 
 export default WorkList;

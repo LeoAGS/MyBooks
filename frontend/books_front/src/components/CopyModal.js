@@ -1,7 +1,7 @@
 import { acquisitionTypeLabels, copyFormatLabels } from '../constants/labels';
 import SuggestionList from './SuggestionList';
 
-function CopyModal({ modal, onChange, onClose, onSubmit, saving, suggestions }) {
+function CopyModal({ allWorks, modal, onChange, onClose, onSubmit, saving, suggestions }) {
   const title = modal.mode === 'edit' ? 'Editar exemplar' : 'Novo exemplar';
 
   return (
@@ -18,6 +18,15 @@ function CopyModal({ modal, onChange, onClose, onSubmit, saving, suggestions }) 
         </div>
 
         <form onSubmit={onSubmit}>
+          <label>
+            Titulo fisico do exemplar
+            <input
+              value={modal.form.copyTitle}
+              onChange={(event) => onChange('copyTitle', event.target.value)}
+              placeholder="Obras completas de Virgilio"
+            />
+          </label>
+
           <div className="form-row">
             <label>
               Formato
@@ -194,6 +203,37 @@ function CopyModal({ modal, onChange, onClose, onSubmit, saving, suggestions }) 
                   />
                   Autografado
                 </label>
+              </div>
+
+
+              <div className="contained-works-field">
+                <span>Obras contidas neste exemplar</span>
+                <div className="contained-works-list">
+                  {allWorks.map((work) => {
+                    const isPrimaryWork = work.id === modal.work.id;
+                    const checked = isPrimaryWork || modal.form.containedWorkIds.includes(work.id);
+                    return (
+                      <label className="check-row contained-work-option" key={work.id}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={isPrimaryWork}
+                          onChange={(event) => {
+                            const currentIds = modal.form.containedWorkIds || [];
+                            const nextIds = event.target.checked
+                              ? [...currentIds, work.id]
+                              : currentIds.filter((workId) => workId !== work.id);
+                            onChange('containedWorkIds', [...new Set(nextIds)]);
+                          }}
+                        />
+                        <span>
+                          <strong>{work.title}</strong>
+                          <small>{work.author}</small>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               <label>

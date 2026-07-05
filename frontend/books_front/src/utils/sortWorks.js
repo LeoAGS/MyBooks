@@ -18,7 +18,7 @@ export function compareWorks(first, second, sortMode) {
   }
 
   if (sortMode === 'copies') {
-    return (second.copyCount || 0) - (first.copyCount || 0) || byTitle;
+    return getCopySortValue(second) - getCopySortValue(first) || byTitle;
   }
 
   return compareDate(second.updatedAt, first.updatedAt) || byTitle;
@@ -50,4 +50,8 @@ function compareDate(first, second) {
 
 function normalizeSortValue(value) {
   return (value || '').trim().toLocaleLowerCase('pt-BR');
+}
+
+function getCopySortValue(work) {
+  return work.volumeCount || work.copyCount || 0;
 }

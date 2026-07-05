@@ -25,10 +25,11 @@ public static class CatalogMutations
     {
         var now = DateTimeOffset.UtcNow;
 
-        return new LibraryCopy
+        var copy = new LibraryCopy
         {
             Id = Guid.NewGuid(),
             WorkId = workId,
+            CopyTitle = request.CopyTitle?.Trim(),
             Format = request.Format,
             Publisher = request.Publisher?.Trim(),
             EditorialCollection = request.EditorialCollection?.Trim(),
@@ -50,6 +51,9 @@ public static class CatalogMutations
             CreatedAt = now,
             UpdatedAt = now
         };
+
+        SyncContainedWorks(copy, workId, request.ContainedWorkIds);
+        return copy;
     }
 
     public static void UpdateWork(Work work, UpdateWorkRequest request)
@@ -82,6 +86,7 @@ public static class CatalogMutations
 
     public static void UpdateCopy(LibraryCopy copy, CreateCopyRequest request)
     {
+        copy.CopyTitle = request.CopyTitle?.Trim();
         copy.Format = request.Format;
         copy.Publisher = request.Publisher?.Trim();
         copy.EditorialCollection = request.EditorialCollection?.Trim();
@@ -100,7 +105,39 @@ public static class CatalogMutations
         copy.IsGift = request.IsGift;
         copy.IsSigned = request.IsSigned;
         copy.Notes = request.Notes?.Trim();
+        SyncContainedWorks(copy, copy.WorkId, request.ContainedWorkIds);
         copy.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private static void SyncContainedWorks(LibraryCopy copy, Guid primaryWorkId, IReadOnlyCollection<Guid>? containedWorkIds)
+    {
+        var orderedWorkIds = new List<Guid> { primaryWorkId };
+        if (containedWorkIds is not null)
+        {
+            orderedWorkIds.AddRange(containedWorkIds.Where(workId => workId != Guid.Empty));
+        }
+
+        var normalizedWorkIds = orderedWorkIds.Distinct().ToList();
+        copy.ContainedWorks.RemoveAll(link => !normalizedWorkIds.Contains(link.WorkId));
+
+        for (var index = 0; index < normalizedWorkIds.Count; index += 1)
+        {
+            var workId = normalizedWorkIds[index];
+            var existing = copy.ContainedWorks.FirstOrDefault(link => link.WorkId == workId);
+            if (existing is null)
+            {
+                copy.ContainedWorks.Add(new CopyWork
+                {
+                    CopyId = copy.Id,
+                    WorkId = workId,
+                    SortOrder = index
+                });
+            }
+            else
+            {
+                existing.SortOrder = index;
+            }
+        }
     }
 
     private static int NormalizeVolumeCount(int? volumeCount) => Math.Max(1, volumeCount.GetValueOrDefault(1));

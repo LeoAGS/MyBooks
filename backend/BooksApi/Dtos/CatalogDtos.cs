@@ -29,8 +29,16 @@ public record ReadingSummary(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
+public record WorkReferenceSummary(
+    Guid Id,
+    string Title,
+    string Author);
+
 public record CopySummary(
     Guid Id,
+    Guid PrimaryWorkId,
+    string PrimaryWorkTitle,
+    string? CopyTitle,
     CopyFormat Format,
     string? Publisher,
     string? EditorialCollection,
@@ -48,7 +56,8 @@ public record CopySummary(
     string Currency,
     bool IsGift,
     bool IsSigned,
-    string? Notes);
+    string? Notes,
+    IReadOnlyCollection<WorkReferenceSummary> ContainedWorks);
 
 public record CatalogResponse(
     IEnumerable<WorkSummary> Works,

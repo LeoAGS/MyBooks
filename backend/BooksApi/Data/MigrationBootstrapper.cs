@@ -126,6 +126,122 @@ public static class MigrationBootstrapper
         await EnsureNullableTextColumnAsync(db, "Works", "CollectionName");
         await EnsureNullableTextColumnAsync(db, "Works", "CollectionNumber");
         await EnsureNullableTextColumnAsync(db, "Copies", "EditorialCollection");
+        await EnsureNullableTextColumnAsync(db, "Copies", "CopyTitle");
+    }
+
+    public static async Task EnsureCopyWorksTableAsync(BooksDbContext db)
+    {
+        if (!await TableExistsAsync(db, "Copies") || !await TableExistsAsync(db, "Works"))
+        {
+            return;
+        }
+
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "CopyWorks" (
+                "CopyId" TEXT NOT NULL,
+                "WorkId" TEXT NOT NULL,
+                "SortOrder" INTEGER NOT NULL DEFAULT 0,
+                "Notes" TEXT NULL,
+                CONSTRAINT "PK_CopyWorks" PRIMARY KEY ("CopyId", "WorkId"),
+                CONSTRAINT "FK_CopyWorks_Copies_CopyId" FOREIGN KEY ("CopyId") REFERENCES "Copies" ("Id") ON DELETE CASCADE,
+                CONSTRAINT "FK_CopyWorks_Works_WorkId" FOREIGN KEY ("WorkId") REFERENCES "Works" ("Id") ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS "IX_CopyWorks_WorkId" ON "CopyWorks" ("WorkId");
+
+            INSERT OR IGNORE INTO "CopyWorks" ("CopyId", "WorkId", "SortOrder", "Notes")
+            SELECT "Id", "WorkId", 0, NULL
+            FROM "Copies"
+            WHERE "WorkId" IS NOT NULL;
+            """);
+    }
+
+    public static async Task RemoveLegacyLiteratureColumnAsync(BooksDbContext db)
+    {
+        if (!await TableExistsAsync(db, "Works") || !await ColumnExistsAsync(db, "Works", "Literature"))
+        {
+            return;
+        }
+
+        await db.Database.ExecuteSqlRawAsync("""
+            PRAGMA foreign_keys = OFF;
+
+            CREATE TABLE "Works_new" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_Works" PRIMARY KEY,
+                "Title" TEXT NOT NULL,
+                "OriginalTitle" TEXT NULL,
+                "Author" TEXT NOT NULL,
+                "OriginalYear" INTEGER NULL,
+                "Genre" TEXT NULL,
+                "Category" TEXT NULL,
+                "CollectionName" TEXT NULL,
+                "CollectionNumber" TEXT NULL,
+                "Description" TEXT NULL,
+                "CoverUrl" TEXT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "UpdatedAt" TEXT NOT NULL
+            );
+
+            INSERT INTO "Works_new" (
+                "Id",
+                "Title",
+                "OriginalTitle",
+                "Author",
+                "OriginalYear",
+                "Genre",
+                "Category",
+                "CollectionName",
+                "CollectionNumber",
+                "Description",
+                "CoverUrl",
+                "CreatedAt",
+                "UpdatedAt"
+            )
+            SELECT
+                "Id",
+                "Title",
+                "OriginalTitle",
+                "Author",
+                "OriginalYear",
+                "Genre",
+                "Category",
+                "CollectionName",
+                "CollectionNumber",
+                "Description",
+                "CoverUrl",
+                "CreatedAt",
+                "UpdatedAt"
+            FROM "Works";
+
+            DROP TABLE "Works";
+            ALTER TABLE "Works_new" RENAME TO "Works";
+
+            PRAGMA foreign_keys = ON;
+            """);
+    }
+
+    public static async Task MarkConsolidatedSchemaMigrationIfAlreadyAppliedAsync(BooksDbContext db)
+    {
+        var migrationId = db.Database.GetMigrations()
+            .FirstOrDefault(migration => migration.EndsWith("_ConsolidateCopyWorksSchema", StringComparison.Ordinal));
+
+        if (migrationId is null || await MigrationHistoryContainsAsync(db, migrationId))
+        {
+            return;
+        }
+
+        if (!await TableExistsAsync(db, "CopyWorks") || !await ColumnExistsAsync(db, "Copies", "CopyTitle"))
+        {
+            return;
+        }
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+            VALUES ({0}, {1});
+            """,
+            migrationId,
+            "8.0.21");
     }
 
     private static async Task CopyLegacyLiteratureToCategoryAsync(BooksDbContext db)
@@ -232,6 +348,29 @@ public static class MigrationBootstrapper
         var parameter = command.CreateParameter();
         parameter.ParameterName = "$columnName";
         parameter.Value = columnName;
+        command.Parameters.Add(parameter);
+
+        if (command.Connection?.State != System.Data.ConnectionState.Open)
+        {
+            await db.Database.OpenConnectionAsync();
+        }
+
+        var result = await command.ExecuteScalarAsync();
+        return Convert.ToInt32(result) > 0;
+    }
+
+    private static async Task<bool> MigrationHistoryContainsAsync(BooksDbContext db, string migrationId)
+    {
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM "__EFMigrationsHistory"
+            WHERE "MigrationId" = $migrationId;
+            """;
+
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "$migrationId";
+        parameter.Value = migrationId;
         command.Parameters.Add(parameter);
 
         if (command.Connection?.State != System.Data.ConnectionState.Open)
