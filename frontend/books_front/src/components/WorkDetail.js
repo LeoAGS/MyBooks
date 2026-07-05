@@ -1,5 +1,6 @@
 import { copyFormatLabels, readingStatusLabels } from '../constants/labels';
 import { formatDate } from '../utils/format';
+import BookCover from './BookCover';
 
 function WorkDetail({
   onCopyCreate,
@@ -22,13 +23,16 @@ function WorkDetail({
   return (
     <>
       <div className="detail-heading">
-        <div>
-          <p className="eyebrow">{work.genre || 'Sem genero'}</p>
-          <h2>{work.title}</h2>
-          <p>
-            {work.author}
-            {work.originalYear ? `, ${work.originalYear}` : ''}
-          </p>
+        <div className="detail-title-group">
+          <BookCover author={work.author} className="book-cover-large" title={work.title} url={work.coverUrl} />
+          <div>
+            <p className="eyebrow">{work.genre || 'Sem genero'}</p>
+            <h2>{work.title}</h2>
+            <p>
+              {work.author}
+              {work.originalYear ? `, ${work.originalYear}` : ''}
+            </p>
+          </div>
         </div>
         <div className="copy-actions">
           <button className="text-button" onClick={() => onWorkEdit(work)} type="button">

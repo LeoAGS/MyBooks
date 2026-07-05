@@ -84,9 +84,15 @@ function WorkModal({ modal, onChange, onClose, onSubmit, saving, suggestions }) 
               placeholder="3, 3A, preludio..."
             />
           </label>
-          <label>
-            URL da capa
-            <input value={modal.form.coverUrl} onChange={(event) => onChange('coverUrl', event.target.value)} />
+          <label className="cover-url-field">
+            URL da capa da obra
+            <input
+              type="url"
+              value={modal.form.coverUrl}
+              onChange={(event) => onChange('coverUrl', event.target.value)}
+              placeholder="https://covers.openlibrary.org/..."
+            />
+            <small className="field-hint">Use um link direto para a imagem da capa. Se ficar vazio, aparece o placeholder.</small>
           </label>
           <label>
             Descricao

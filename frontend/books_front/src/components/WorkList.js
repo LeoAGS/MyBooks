@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { readingStatusLabels, sortOptions } from '../constants/labels';
+import BookCover from './BookCover';
 import { groupWorks } from '../utils/groupWorks';
 
 function WorkList({
@@ -89,14 +90,15 @@ function WorkList({
                     onClick={() => onSelectWork(work.id)}
                     type="button"
                   >
-                    <span>
+                    <BookCover author={work.author} className="book-cover-small" title={work.title} url={work.coverUrl} />
+                    <span className="work-row-main">
                       <strong>{work.title}</strong>
                       <small>{work.author}</small>
-                    </span>
-                    <span className="row-tags">
-                      <span className="row-meta">{readingStatusLabels[work.reading?.status] || 'Sem leitura'}</span>
-                      <span className="row-meta">
-                        {work.copyCount} exemplar{work.copyCount === 1 ? '' : 'es'}
+                      <span className="row-tags">
+                        <span className="row-meta">{readingStatusLabels[work.reading?.status] || 'Sem leitura'}</span>
+                        <span className="row-meta">
+                          {work.copyCount} exemplar{work.copyCount === 1 ? '' : 'es'}
+                        </span>
                       </span>
                     </span>
                   </button>
