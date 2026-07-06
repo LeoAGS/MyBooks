@@ -1205,39 +1205,89 @@ textarea:focus {
   text-transform: uppercase;
 }
 
-.contained-works-list {
+.contained-work-search {
+  gap: 4px;
+}
+
+.contained-work-suggestions,
+.selected-contained-works {
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
-  gap: 4px;
-  max-height: 220px;
-  overflow: auto;
-  padding: 8px;
+  overflow: hidden;
 }
 
-.contained-work-option {
-  align-items: start;
-  border-radius: 6px;
-  padding: 6px;
-}
-
-.contained-work-option:hover {
+.contained-work-suggestions button,
+.selected-contained-work {
+  align-items: center;
   background: #fbfbfa;
-}
-
-.contained-work-option span {
-  display: grid;
-  gap: 2px;
-}
-
-.contained-work-option strong {
+  border: 0;
   color: var(--ink);
-  font-size: 0.88rem;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 44px;
+  padding: 9px 10px;
+  text-align: left;
 }
 
-.contained-work-option small {
+.contained-work-suggestions button + button,
+.selected-contained-work + .selected-contained-work {
+  border-top: 1px solid var(--line);
+}
+
+.contained-work-suggestions button:hover,
+.contained-work-suggestions button:focus-visible {
+  background: var(--surface-strong);
+  outline: none;
+}
+
+.contained-work-suggestions strong,
+.selected-contained-work strong {
+  display: block;
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contained-work-suggestions span,
+.selected-contained-work small {
   color: var(--muted);
+  display: block;
   font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-contained-work em {
+  background: #edf2ef;
+  border-radius: 999px;
+  color: var(--primary-strong);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 800;
+  padding: 5px 8px;
+}
+
+.selected-contained-work button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  min-height: 30px;
+  padding: 5px 8px;
+}
+
+.selected-contained-work button:hover,
+.selected-contained-work button:focus-visible {
+  background: #fff7f5;
+  border-color: #efc6bb;
+  color: #93412a;
+  outline: none;
 }
 
 .modal-actions {

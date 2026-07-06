@@ -30,6 +30,7 @@ public static class CatalogMutations
             Id = Guid.NewGuid(),
             WorkId = workId,
             CopyTitle = request.CopyTitle?.Trim(),
+            CoverUrl = request.CoverUrl?.Trim(),
             Format = request.Format,
             Publisher = request.Publisher?.Trim(),
             EditorialCollection = request.EditorialCollection?.Trim(),
@@ -87,6 +88,7 @@ public static class CatalogMutations
     public static void UpdateCopy(LibraryCopy copy, CreateCopyRequest request)
     {
         copy.CopyTitle = request.CopyTitle?.Trim();
+        copy.CoverUrl = request.CoverUrl?.Trim();
         copy.Format = request.Format;
         copy.Publisher = request.Publisher?.Trim();
         copy.EditorialCollection = request.EditorialCollection?.Trim();

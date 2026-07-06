@@ -4,6 +4,7 @@ public class LibraryCopy
     public Guid WorkId { get; set; }
     public Work? Work { get; set; }
     public string? CopyTitle { get; set; }
+    public string? CoverUrl { get; set; }
     public CopyFormat Format { get; set; }
     public string? Publisher { get; set; }
     public string? EditorialCollection { get; set; }

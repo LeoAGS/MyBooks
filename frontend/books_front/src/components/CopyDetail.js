@@ -41,7 +41,7 @@ function CopyDetail({ copyItem, onCopyDelete, onCopyEdit, work }) {
     <>
       <div className="detail-heading">
         <div className="detail-title-group">
-          <BookCover author={work.author} className="book-cover-large" title={title} url={work.coverUrl} />
+          <BookCover author={work.author} className="book-cover-large" title={title} url={copy.coverUrl || work.coverUrl} />
           <div>
             <p className="eyebrow">Exemplar fisico</p>
             <h2>{title}</h2>

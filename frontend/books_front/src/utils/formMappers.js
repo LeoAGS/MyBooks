@@ -57,6 +57,7 @@ export function readingFormToPayload(form) {
 export function copyToForm(copy) {
   return {
     copyTitle: copy.copyTitle || '',
+    coverUrl: copy.coverUrl || '',
     containedWorkIds: copy.containedWorks?.map((work) => work.id) || [],
     format: copy.format || 'Physical',
     publisher: copy.publisher || '',
@@ -82,6 +83,7 @@ export function copyToForm(copy) {
 export function copyFormToPayload(form) {
   return {
     copyTitle: emptyToNull(form.copyTitle),
+    coverUrl: emptyToNull(form.coverUrl),
     containedWorkIds: form.containedWorkIds || [],
     format: form.format,
     publisher: emptyToNull(form.publisher),

@@ -39,6 +39,7 @@ public record CopySummary(
     Guid PrimaryWorkId,
     string PrimaryWorkTitle,
     string? CopyTitle,
+    string? CoverUrl,
     CopyFormat Format,
     string? Publisher,
     string? EditorialCollection,

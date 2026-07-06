@@ -16,6 +16,7 @@ export function buildLibraryItems(works) {
     const title = copy.copyTitle || copy.primaryWorkTitle || primaryWork.title;
     const publisherLine = [copy.publisher, copy.editorialCollection, copy.edition].filter(Boolean).join(' · ');
     const volumeCount = Math.max(1, copy.volumeCount || 1);
+    const coverUrl = copy.coverUrl || primaryWork.coverUrl;
 
     return {
       ...primaryWork,
@@ -28,6 +29,7 @@ export function buildLibraryItems(works) {
       workTitle: primaryWork.title,
       subtitle: copy.copyTitle ? primaryWork.title : primaryWork.author,
       author: primaryWork.author,
+      coverUrl,
       copy,
       copies: [copy],
       copyCount: 1,
@@ -43,7 +45,7 @@ export function buildLibraryItems(works) {
         containedTitles.length > 1 ? `${containedTitles.length} obras` : null,
         publisherLine || null,
       ].filter(Boolean),
-      searchable: `${title} ${primaryWork.title} ${primaryWork.author} ${primaryWork.genre || ''} ${primaryWork.category || ''} ${copy.publisher || ''} ${copy.editorialCollection || ''} ${copy.edition || ''} ${copy.isbn || ''} ${copy.language || ''} ${copy.location || ''} ${containedTitles.join(' ')}`.toLowerCase(),
+      searchable: `${title} ${primaryWork.title} ${primaryWork.author} ${primaryWork.genre || ''} ${primaryWork.category || ''} ${copy.publisher || ''} ${copy.editorialCollection || ''} ${copy.edition || ''} ${copy.isbn || ''} ${copy.language || ''} ${copy.location || ''} ${copy.coverUrl || ''} ${containedTitles.join(' ')}`.toLowerCase(),
     };
   });
 }

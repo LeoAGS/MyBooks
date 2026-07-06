@@ -10,10 +10,13 @@ public static class CatalogMapper
             .ToList();
 
         var currentReading = readings.FirstOrDefault();
-        var copies = GetCopiesForWork(work)
+        var workCopies = GetCopiesForWork(work)
             .OrderBy(copy => copy.Format)
             .ThenBy(copy => copy.Location)
             .ThenBy(copy => copy.CopyTitle)
+            .ToList();
+        var representativeCoverUrl = GetRepresentativeCoverUrl(work, workCopies);
+        var copies = workCopies
             .Select(ToCopySummary)
             .ToList();
 
@@ -28,7 +31,7 @@ public static class CatalogMapper
             work.CollectionName,
             work.CollectionNumber,
             work.Description,
-            work.CoverUrl,
+            representativeCoverUrl,
             currentReading,
             readings,
             copies,
@@ -59,6 +62,11 @@ public static class CatalogMapper
         return copies.Concat(containedCopies).DistinctBy(copy => copy.Id);
     }
 
+    private static string? GetRepresentativeCoverUrl(Work work, IEnumerable<LibraryCopy> copies) =>
+        !string.IsNullOrWhiteSpace(work.CoverUrl)
+            ? work.CoverUrl
+            : copies.Select(copy => copy.CoverUrl).FirstOrDefault(coverUrl => !string.IsNullOrWhiteSpace(coverUrl));
+
     private static ReadingSummary ToReadingSummary(Reading reading) =>
         new(
             reading.Id,
@@ -84,6 +92,7 @@ public static class CatalogMapper
             copy.WorkId,
             primaryWork?.Title ?? "Obra principal",
             copy.CopyTitle,
+            copy.CoverUrl,
             copy.Format,
             copy.Publisher,
             copy.EditorialCollection,

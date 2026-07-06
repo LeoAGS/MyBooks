@@ -13,6 +13,7 @@ export const emptyWorkModalForm = {
 
 export const emptyCopyForm = {
   copyTitle: '',
+  coverUrl: '',
   containedWorkIds: [],
   format: 'Physical',
   publisher: '',

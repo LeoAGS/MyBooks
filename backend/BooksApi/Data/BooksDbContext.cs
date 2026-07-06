@@ -46,6 +46,7 @@ public class BooksDbContext(DbContextOptions<BooksDbContext> options) : DbContex
             entity.Property(copy => copy.Format).HasConversion<string>().HasMaxLength(40);
             entity.Property(copy => copy.AcquisitionType).HasConversion<string>().HasMaxLength(40);
             entity.Property(copy => copy.CopyTitle).HasMaxLength(240);
+            entity.Property(copy => copy.CoverUrl).HasMaxLength(500);
             entity.Property(copy => copy.Publisher).HasMaxLength(180);
             entity.Property(copy => copy.EditorialCollection).HasMaxLength(180);
             entity.Property(copy => copy.Edition).HasMaxLength(120);

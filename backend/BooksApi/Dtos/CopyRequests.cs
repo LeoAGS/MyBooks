@@ -1,5 +1,6 @@
 public record CreateCopyRequest(
     string? CopyTitle,
+    string? CoverUrl,
     CopyFormat Format,
     string? Publisher,
     string? EditorialCollection,

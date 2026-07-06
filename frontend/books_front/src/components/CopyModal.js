@@ -1,8 +1,40 @@
+import { useMemo, useState } from 'react';
 import { acquisitionTypeLabels, copyFormatLabels } from '../constants/labels';
 import SuggestionList from './SuggestionList';
 
 function CopyModal({ allWorks, modal, onChange, onClose, onSubmit, saving, suggestions }) {
   const title = modal.mode === 'edit' ? 'Editar exemplar' : 'Novo exemplar';
+  const [containedWorkQuery, setContainedWorkQuery] = useState('');
+  const primaryWork = modal.work;
+  const selectedContainedWorkIds = useMemo(
+    () => [...new Set((modal.form.containedWorkIds || []).filter((workId) => workId !== primaryWork.id))],
+    [modal.form.containedWorkIds, primaryWork.id]
+  );
+  const selectedContainedWorks = useMemo(
+    () => [primaryWork, ...selectedContainedWorkIds.map((workId) => allWorks.find((work) => work.id === workId)).filter(Boolean)],
+    [allWorks, primaryWork, selectedContainedWorkIds]
+  );
+  const containedWorkSuggestions = useMemo(() => {
+    const normalizedQuery = containedWorkQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return [];
+    }
+
+    const selectedIds = new Set(selectedContainedWorks.map((work) => work.id));
+    return allWorks
+      .filter((work) => !selectedIds.has(work.id))
+      .filter((work) => `${work.title} ${work.author}`.toLowerCase().includes(normalizedQuery))
+      .slice(0, 8);
+  }, [allWorks, containedWorkQuery, selectedContainedWorks]);
+
+  function addContainedWork(workId) {
+    onChange('containedWorkIds', [...new Set([...selectedContainedWorkIds, workId])]);
+    setContainedWorkQuery('');
+  }
+
+  function removeContainedWork(workId) {
+    onChange('containedWorkIds', selectedContainedWorkIds.filter((selectedWorkId) => selectedWorkId !== workId));
+  }
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -25,6 +57,16 @@ function CopyModal({ allWorks, modal, onChange, onClose, onSubmit, saving, sugge
               onChange={(event) => onChange('copyTitle', event.target.value)}
               placeholder="Obras completas de Virgilio"
             />
+          </label>
+
+          <label className="cover-url-field">
+            URL da capa do exemplar
+            <input
+              value={modal.form.coverUrl}
+              onChange={(event) => onChange('coverUrl', event.target.value)}
+              placeholder="https://..."
+            />
+            <span className="field-hint">Use aqui a capa desta edicao ou volume especifico.</span>
           </label>
 
           <div className="form-row">
@@ -208,29 +250,43 @@ function CopyModal({ allWorks, modal, onChange, onClose, onSubmit, saving, sugge
 
               <div className="contained-works-field">
                 <span>Obras contidas neste exemplar</span>
-                <div className="contained-works-list">
-                  {allWorks.map((work) => {
-                    const isPrimaryWork = work.id === modal.work.id;
-                    const checked = isPrimaryWork || modal.form.containedWorkIds.includes(work.id);
+                <label className="contained-work-search">
+                  Buscar obra
+                  <input
+                    value={containedWorkQuery}
+                    onChange={(event) => setContainedWorkQuery(event.target.value)}
+                    placeholder="Digite titulo ou autor"
+                  />
+                </label>
+
+                {containedWorkSuggestions.length > 0 && (
+                  <div className="contained-work-suggestions">
+                    {containedWorkSuggestions.map((work) => (
+                      <button key={work.id} onClick={() => addContainedWork(work.id)} type="button">
+                        <strong>{work.title}</strong>
+                        <span>{work.author}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="selected-contained-works">
+                  {selectedContainedWorks.map((work) => {
+                    const isPrimaryWork = work.id === primaryWork.id;
                     return (
-                      <label className="check-row contained-work-option" key={work.id}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={isPrimaryWork}
-                          onChange={(event) => {
-                            const currentIds = modal.form.containedWorkIds || [];
-                            const nextIds = event.target.checked
-                              ? [...currentIds, work.id]
-                              : currentIds.filter((workId) => workId !== work.id);
-                            onChange('containedWorkIds', [...new Set(nextIds)]);
-                          }}
-                        />
+                      <div className="selected-contained-work" key={work.id}>
                         <span>
                           <strong>{work.title}</strong>
                           <small>{work.author}</small>
                         </span>
-                      </label>
+                        {isPrimaryWork ? (
+                          <em>Principal</em>
+                        ) : (
+                          <button onClick={() => removeContainedWork(work.id)} type="button">
+                            Remover
+                          </button>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
